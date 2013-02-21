@@ -1,0 +1,4 @@
+fuego.png
+gnugo.png
+fuegoSquare.png
+mogo.png

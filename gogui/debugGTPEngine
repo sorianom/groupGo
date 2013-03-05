@@ -1,0 +1,72 @@
+command read = protocol_version
+= 2
+
+command read = name
+= MoGo
+
+command read = version
+= MoGo release 1. Please read http://www.lri.fr/~gelly/MoGo.htm for more information. That is NOT an official developpement MoGo version, but it is a public release. Its strength highly depends on your hardware and the time settings.
+
+command read = list_commands
+= protocol_version
+name
+version
+known_command
+list_commands
+quit
+play
+genmove
+time_left
+final_status_list
+clear_board
+time_settings
+reg_genmove
+undo
+show_sequence
+showboard
+show_history
+show_free_location
+update_location_list
+is_atari_saving_move
+is_still_eating_move
+set_random_mode
+showTerritory
+kgs-genmove_cleanup
+show_evaluation
+place_free_handicap
+set_free_handicap
+komi
+
+command read = boardsize
+= 
+
+command read = clear_board
+= 
+
+command read = komi
+= 
+
+command read = boardsize
+= 
+
+command read = clear_board
+= 
+
+command read = komi
+= 
+
+command read = play
+= 
+
+command read = genmove
+= D5
+
+command read = undo
+= 
+
+command read = play
+= 
+
+command read = quit
+= 
+

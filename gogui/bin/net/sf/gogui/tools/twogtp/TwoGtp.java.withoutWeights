@@ -1,0 +1,2001 @@
+// TwoGtp.java
+
+package net.sf.gogui.tools.twogtp;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.FileWriter;
+import java.io.BufferedWriter;
+import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.Random;
+import java.util.Scanner;
+
+import net.sf.gogui.game.ConstNode;
+import net.sf.gogui.game.ConstGameTree;
+import net.sf.gogui.game.Game;
+import net.sf.gogui.game.NodeUtil;
+import net.sf.gogui.game.TimeSettings;
+import net.sf.gogui.go.BlackWhiteSet;
+import net.sf.gogui.go.ConstBoard;
+import net.sf.gogui.go.GoColor;
+import static net.sf.gogui.go.GoColor.BLACK;
+import static net.sf.gogui.go.GoColor.WHITE;
+import net.sf.gogui.go.GoPoint;
+import net.sf.gogui.go.InvalidKomiException;
+import net.sf.gogui.go.InvalidPointException;
+import net.sf.gogui.go.Komi;
+import net.sf.gogui.go.Move;
+import net.sf.gogui.gtp.GtpCommand;
+import net.sf.gogui.gtp.GtpEngine;
+import net.sf.gogui.gtp.GtpError;
+import net.sf.gogui.gtp.GtpResponseFormatError;
+import net.sf.gogui.gtp.GtpUtil;
+import net.sf.gogui.sgf.SgfError;
+import net.sf.gogui.sgf.SgfReader;
+import net.sf.gogui.sgf.SgfWriter;
+import net.sf.gogui.util.ErrorMessage;
+import net.sf.gogui.util.ObjectUtil;
+import net.sf.gogui.util.Platform;
+import net.sf.gogui.util.StringUtil;
+import net.sf.gogui.util.Table;
+import net.sf.gogui.version.Version;
+import net.sf.gogui.xml.XmlWriter;
+
+/** GTP adapter for playing games between two Go programs. */
+public class TwoGtp
+    extends GtpEngine
+{
+	private Random generator;
+	private FileWriter[] fstream;
+	private BufferedWriter[] expertLog;
+	final String path = "experiments/ex16w/";
+	
+	private GoColor myColor;
+	private String myColorShort;
+	private GoColor oponentColor;
+	private String oponentColorShort;
+	
+    /** Constructor.
+        @param komi The fixed komi. See TwoGtp documentation for option -komi
+    */
+    public TwoGtp(String black, String white, String alice, String albert, String john, String francesco, String groupColor, String referee, String observer,
+                  int size, Komi komi, int numberGames, boolean alternate,
+                  String filePrefix, boolean force, boolean verbose,
+                  Openings openings, TimeSettings timeSettings,
+                  boolean useXml)
+        throws Exception
+    {
+        super(null);
+        assert size > 0;
+        assert size <= GoPoint.MAX_SIZE;
+        assert komi != null;
+        if (black.equals(""))
+            throw new ErrorMessage("No black program set");
+        if (white.equals(""))
+            throw new ErrorMessage("No white program set");
+        if (alice.equals(""))
+            throw new ErrorMessage("Where is Alice?..");
+        if (albert.equals(""))
+            throw new ErrorMessage("Sorry, can't work without Albert");
+        if (john.equals(""))
+            throw new ErrorMessage("Miss John...");
+        if (francesco.equals(""))
+            throw new ErrorMessage("Gosh, where is Francesco?..");
+        m_filePrefix = filePrefix;
+        m_useXml = useXml;
+        File resultFile = getResultFile();
+        if (force && resultFile.exists())
+            if (! resultFile.delete())
+                throw new ErrorMessage("Could not delete file '" + resultFile
+                                       + "'");
+        m_allPrograms = new ArrayList<Program>();
+        m_black = new Program(black, "Black", "B", verbose);
+        m_allPrograms.add(m_black);
+        m_white = new Program(white, "White", "W", verbose);
+        m_allPrograms.add(m_white);
+        m_alice = new Program(alice, "Alice", "Ali", verbose);
+        m_allPrograms.add(m_alice);
+        m_albert = new Program(albert, "Albert", "Alb", verbose);
+        m_allPrograms.add(m_albert);
+        m_john = new Program(john, "John", "J", verbose);
+        m_allPrograms.add(m_john);
+        m_francesco = new Program(francesco, "Francesco", "F", verbose);
+        m_allPrograms.add(m_francesco);        
+        if (referee.equals(""))
+            m_referee = null;
+        else
+        {
+            m_referee = new Program(referee, "Referee", "R", verbose);
+            m_allPrograms.add(m_referee);
+        }
+        if (observer.equals(""))
+            m_observer = null;
+        else
+        {
+            m_observer = new Program(observer, "Observer", "O", verbose);
+            m_allPrograms.add(m_observer);
+        }
+        for (Program program : m_allPrograms)
+            program.setLabel(m_allPrograms);
+        m_size = size;
+        m_komi = komi;
+        m_alternate = alternate;
+        m_numberGames = numberGames;
+        m_openings = openings;
+        m_verbose = verbose;
+        m_timeSettings = timeSettings;
+        initTable();
+        readGames();
+        initGame(size);
+        generator = new Random();
+        
+    	fstream = new FileWriter[4];
+    	expertLog = new BufferedWriter[4];
+    	
+    	if (groupColor.equals("black"))
+    	{
+    		myColor = BLACK;
+    		myColorShort = "B";
+    		oponentColor = WHITE;
+    		oponentColorShort = "W";
+    	}
+    	else
+    	{
+    		myColor = WHITE;
+    		myColorShort = "W";
+    		oponentColor = BLACK;
+    		oponentColorShort = "B";
+    	}
+    }
+
+    public void autoPlay() throws Exception
+    {
+        try
+        {
+            System.in.close();
+            StringBuilder response = new StringBuilder(256);
+            while (m_gameIndex < m_numberGames)
+            {
+                try
+                {
+                    newGame(m_size);
+                    while (! gameOver())
+                    {
+                        response.setLength(0);
+                        sendGenmove(getToMove(), response);
+                    }
+                }
+                catch (GtpError e)
+                {
+                    //handleEndOfGame(true, e.getMessage());
+                	if (m_black.isProgramDead())
+                        throw new ErrorMessage("Black program died");
+                    if (m_white.isProgramDead())
+                        throw new ErrorMessage("White program died");
+                    if (m_alice.isProgramDead())
+                        throw new ErrorMessage("Can't see Alice anymore");
+                    if (m_albert.isProgramDead())
+                        throw new ErrorMessage("Can't see Albert anymore");
+                    if (m_john.isProgramDead())
+                        throw new ErrorMessage("Can't see John anymore");
+                    if (m_francesco.isProgramDead())
+                        throw new ErrorMessage("Can't see Francesco anymore");
+                    
+                    // Well, one of the experts died... But let's go back to work!..
+                    // ** Does not seem to work... Everything still stops if some expert die
+                    while (! gameOver())
+                    {
+                        response.setLength(0);
+                        sendGenmove(getToMove(), response);
+                    }
+                }
+                if (m_black.isProgramDead())
+                    throw new ErrorMessage("Black program died");
+                if (m_white.isProgramDead())
+                    throw new ErrorMessage("White program died");
+                if (m_alice.isProgramDead())
+                    throw new ErrorMessage("Can't see Alice anymore");
+                if (m_albert.isProgramDead())
+                    throw new ErrorMessage("Can't see Albert anymore");
+                if (m_john.isProgramDead())
+                    throw new ErrorMessage("Can't see John anymore");
+                if (m_francesco.isProgramDead())
+                    throw new ErrorMessage("Can't see Francesco anymore");
+            }
+        }
+        finally
+        {
+            close();
+        }
+    }
+
+    /** Get games left to play.
+        @return number of games left of -1 if no maximum set.
+    */
+    public int gamesLeft()
+    {
+        if (m_numberGames <= 0)
+            return -1;
+        return m_numberGames - m_gameIndex;
+    }
+
+    public void handleCommand(GtpCommand cmd) throws GtpError
+    {
+        String command = cmd.getCommand();
+        if (command.equals("boardsize"))
+            cmdBoardSize(cmd);
+        else if (command.equals("clear_board"))
+            cmdClearBoard(cmd);
+        else if (command.equals("final_score"))
+            finalStatusCommand(cmd);
+        else if (command.equals("final_status"))
+            finalStatusCommand(cmd);
+        else if (command.equals("final_status_list"))
+            finalStatusCommand(cmd);
+        else if (command.equals("gogui-interrupt"))
+            ;
+        else if (command.equals("gogui-title"))
+            cmd.setResponse(getTitle());
+        else if (command.equals("gogui-twogtp-black"))
+            twogtpColor(m_black, cmd);
+        else if (command.equals("gogui-twogtp-white"))
+            twogtpColor(m_white, cmd);
+        else if (command.equals("gogui-twogtp-referee"))
+            twogtpReferee(cmd);
+        else if (command.equals("gogui-twogtp-observer"))
+            twogtpObserver(cmd);
+        else if (command.equals("quit"))
+        {
+            close();
+            setQuit();
+        }
+        else if (command.equals("play"))
+            cmdPlay(cmd);
+        else if (command.equals("undo"))
+            cmdUndo(cmd);
+        else if (command.equals("genmove"))
+            cmdGenmove(cmd);
+        else if (command.equals("komi"))
+            komi(cmd);
+        else if (command.equals("scoring_system"))
+            sendIfSupported(command, cmd.getLine());
+        else if (command.equals("name"))
+            cmd.setResponse("GoGuiTwoGtp");
+        else if (command.equals("version"))
+            cmd.setResponse(Version.get());
+        else if (command.equals("protocol_version"))
+            cmd.setResponse("2");
+        else if (command.equals("list_commands"))
+            cmd.setResponse("boardsize\n" +
+                            "clear_board\n" +
+                            "final_score\n" +
+                            "final_status\n" +
+                            "final_status_list\n" +
+                            "genmove\n" +
+                            "gogui-interrupt\n" +
+                            "gogui-title\n" +
+                            "komi\n" +
+                            "list_commands\n" +
+                            "name\n" +
+                            "play\n" +
+                            "quit\n" +
+                            "scoring_system\n" +
+                            "time_settings\n" +
+                            "gogui-twogtp-black\n" +
+                            "gogui-twogtp-observer\n" +
+                            "gogui-twogtp-referee\n" +
+                            "gogui-twogtp-white\n" +
+                            "undo\n" +
+                            "version\n");
+        else if (GtpUtil.isStateChangingCommand(command))
+            throw new GtpError("unknown command");
+        else if (command.equals("time_settings"))
+            sendIfSupported(command, cmd.getLine());
+        else
+        {
+            boolean isExtCommandBlack = m_black.isSupported(command);
+            boolean isExtCommandWhite = m_white.isSupported(command);
+            boolean isExtCommandAlice = m_alice.isSupported(command);
+            boolean isExtCommandAlbert = m_albert.isSupported(command);
+            boolean isExtCommandJohn = m_john.isSupported(command);
+            boolean isExtCommandFrancesco = m_francesco.isSupported(command);            
+            boolean isExtCommandReferee = false;
+            if (m_referee != null)
+                isExtCommandReferee = m_referee.isSupported(command);
+            boolean isExtCommandObserver = false;
+            if (m_observer != null)
+                isExtCommandObserver = m_observer.isSupported(command);
+            if (isExtCommandBlack && ! isExtCommandObserver
+                && ! isExtCommandWhite && ! isExtCommandAlice
+                && ! isExtCommandAlbert   && !isExtCommandJohn
+                && ! isExtCommandFrancesco && ! isExtCommandReferee)
+                forward(m_black, cmd);
+            if (isExtCommandWhite && ! isExtCommandObserver
+                && ! isExtCommandBlack && ! isExtCommandAlice
+                && ! isExtCommandAlbert   && !isExtCommandJohn
+                && ! isExtCommandFrancesco && ! isExtCommandReferee)
+                forward(m_white, cmd);
+            if (isExtCommandAlice && ! isExtCommandObserver
+                && ! isExtCommandBlack && ! isExtCommandWhite
+                && ! isExtCommandAlbert && ! isExtCommandJohn
+                && isExtCommandFrancesco && ! isExtCommandReferee)
+                forward(m_alice, cmd);
+            if (isExtCommandAlbert && ! isExtCommandObserver
+                && ! isExtCommandBlack && ! isExtCommandAlice
+                && ! isExtCommandJohn && ! isExtCommandFrancesco
+                && ! isExtCommandWhite && ! isExtCommandReferee)
+                forward(m_albert, cmd);
+            if (isExtCommandJohn && ! isExtCommandObserver
+                    && ! isExtCommandBlack && ! isExtCommandAlice
+                    && ! isExtCommandAlbert && ! isExtCommandFrancesco
+                    && ! isExtCommandWhite && ! isExtCommandReferee)
+            	forward(m_john, cmd);
+            if (isExtCommandFrancesco && ! isExtCommandObserver
+                    && ! isExtCommandBlack && ! isExtCommandAlice
+                    && ! isExtCommandJohn && ! isExtCommandAlbert
+                    && ! isExtCommandWhite && ! isExtCommandReferee)
+                 forward(m_francesco, cmd);
+            if (isExtCommandReferee && ! isExtCommandObserver
+                && ! isExtCommandBlack && ! isExtCommandWhite
+                && ! isExtCommandAlice && ! isExtCommandAlbert
+                && ! isExtCommandJohn && ! isExtCommandFrancesco)
+                forward(m_referee, cmd);
+            if (isExtCommandObserver && ! isExtCommandReferee
+                && ! isExtCommandBlack && ! isExtCommandWhite
+                && ! isExtCommandAlice && ! isExtCommandAlbert
+                && ! isExtCommandJohn && ! isExtCommandFrancesco)
+                forward(m_observer, cmd);
+            if (! isExtCommandReferee
+                && ! isExtCommandBlack
+                && ! isExtCommandObserver
+                && ! isExtCommandWhite
+                && ! isExtCommandAlice
+                && ! isExtCommandAlbert
+                && ! isExtCommandJohn
+                && ! isExtCommandFrancesco)
+                throw new GtpError("unknown command");
+            throw new GtpError("use gogui-twogtp-black/white/referee/observer");
+        }
+    }
+
+    public void interruptCommand()
+    {
+        for (Program program : m_allPrograms)
+            program.interruptProgram();
+    }
+
+    /** Limit number of moves.
+        @param maxMoves Maximum number of moves after which genmove will fail,
+        -1 for no limit.
+    */
+    public void setMaxMoves(int maxMoves)
+    {
+        m_maxMoves = maxMoves;
+    }
+
+    private final boolean m_alternate;
+
+    private final boolean m_useXml;
+
+    private boolean m_gameSaved;
+
+    private int m_maxMoves = 1000;
+
+    private boolean m_resigned;
+
+    private final boolean m_verbose;
+
+    private int m_gameIndex;
+
+    private final int m_numberGames;
+
+    private final int m_size;
+
+    /** Fixed komi. */
+    private final Komi m_komi;
+
+    private Game m_game;
+
+    private GoColor m_resignColor;
+
+    private final Openings m_openings;
+
+    private final Program m_black;
+
+    private final Program m_white;
+    
+    private final Program m_alice;
+    
+    private final Program m_albert;
+    
+    private final Program m_john;
+    
+    private final Program m_francesco;
+    
+    private final Program m_referee;
+
+    private final Program m_observer;
+
+    private final ArrayList<Program> m_allPrograms;
+
+    private final BlackWhiteSet<Double> m_realTime =
+        new BlackWhiteSet<Double>(0., 0.);
+
+    private String m_openingFile;
+
+    private final String m_filePrefix;
+
+    private final ArrayList<ArrayList<Compare.Placement>> m_games
+        = new ArrayList<ArrayList<Compare.Placement>>(100);
+
+    private Table m_table;
+
+    private final TimeSettings m_timeSettings;
+
+    private ConstNode m_lastOpeningNode;
+
+    private void checkInconsistentState() throws GtpError
+    {
+        for (Program program : m_allPrograms)
+            if (program.isOutOfSync())
+                throw new GtpError("Inconsistent state");
+    }
+
+    private void close()
+    {
+        for (Program program : m_allPrograms)
+            program.close();
+    }
+
+    private void cmdBoardSize(GtpCommand cmd) throws GtpError
+    {
+        cmd.checkNuArg(1);
+        int size = cmd.getIntArg(0, 1, GoPoint.MAX_SIZE);
+        if (size != m_size)
+            throw new GtpError("Size must be " + m_size);
+    }
+
+    private void cmdClearBoard(GtpCommand cmd) throws GtpError
+    {
+        cmd.checkArgNone();
+        if (gamesLeft() == 0)
+            throw new GtpError("Maximum number of " + m_numberGames +
+                               " games reached");
+        newGame(m_size);
+    }
+
+    private void cmdGenmove(GtpCommand cmd) throws GtpError
+    {
+        try
+        {
+            sendGenmove(cmd.getColorArg(), cmd.getResponse());
+        }
+        catch (ErrorMessage e)
+        {
+            throw new GtpError(e.getMessage());
+        }
+        catch (GtpResponseFormatError e)
+        {
+        	throw new GtpError(e.getMessage());
+        }
+    }
+
+    private void cmdPlay(GtpCommand cmd) throws GtpError
+    {
+        cmd.checkNuArg(2);
+        checkInconsistentState();
+        GoColor color = cmd.getColorArg(0);
+        GoPoint point = cmd.getPointArg(1, m_size);
+        Move move = Move.get(color, point);
+        m_game.play(move);
+        synchronize();
+    }
+
+    private void cmdUndo(GtpCommand cmd) throws GtpError
+    {
+        cmd.checkArgNone();
+        int moveNumber = m_game.getMoveNumber();
+        if (moveNumber == 0)
+            throw new GtpError("cannot undo");
+        m_game.gotoNode(getCurrentNode().getFatherConst());
+        assert m_game.getMoveNumber() == moveNumber - 1;
+        synchronize();
+    }
+
+    private void finalStatusCommand(GtpCommand cmd) throws GtpError
+    {
+        checkInconsistentState();
+        if (m_referee != null)
+            forward(m_referee, cmd);
+        else if (m_black.isSupported("final_status"))
+            forward(m_black, cmd);
+        else if (m_white.isSupported("final_status"))
+            forward(m_white, cmd);
+        else
+            throw new GtpError("neither player supports final_status");
+    }
+
+    private void initTable() throws ErrorMessage
+    {
+        File file = getResultFile();
+        if (file.exists())
+        {
+            m_table = new Table();
+            try
+            {
+                m_table.read(getResultFile());
+                int lastRowIndex = m_table.getNumberRows() - 1;
+                m_gameIndex =
+                    Integer.parseInt(m_table.get("GAME", lastRowIndex)) + 1;
+                if (m_gameIndex < 0)
+                    throw new ErrorMessage("Invalid file format: " + file);
+            }
+            catch (NumberFormatException e)
+            {
+                throw new ErrorMessage("Invalid file format: " + file);
+            }
+            catch (FileNotFoundException e)
+            {
+                throw new ErrorMessage(e.getMessage());
+            }
+            catch (IOException e)
+            {
+                throw new ErrorMessage("Read error: " + file);
+            }
+            return;
+        }
+        ArrayList<String> columns = new ArrayList<String>();
+        columns.add("GAME");
+        columns.add("RES_B");
+        columns.add("RES_W");
+        columns.add("RES_R");
+        columns.add("ALT");
+        columns.add("DUP");
+        columns.add("LEN");
+        columns.add("TIME_B");
+        columns.add("TIME_W");
+        columns.add("CPU_B");
+        columns.add("CPU_W");
+        columns.add("ERR");
+        columns.add("ERR_MSG");
+        m_table = new Table(columns);
+        m_black.setTableProperties(m_table);
+        m_white.setTableProperties(m_table);
+        if (m_referee == null)
+            m_table.setProperty("Referee", "-");
+        else
+            m_referee.setTableProperties(m_table);
+        m_table.setProperty("Size", Integer.toString(m_size));
+        m_table.setProperty("Komi", m_komi.toString());
+        if (m_openings != null)
+            m_table.setProperty("Openings",
+                                m_openings.getDirectory() + " ("
+                                + m_openings.getNumber() + " files)");
+        m_table.setProperty("Date", StringUtil.getDate());
+        m_table.setProperty("Host", Platform.getHostInfo());
+        m_table.setProperty("Xml", m_useXml ? "1" : "0");
+    }
+
+    private void forward(Program program, GtpCommand cmd) throws GtpError
+    {
+        cmd.setResponse(program.send(cmd.getLine()));
+    }
+
+    private boolean gameOver()
+    {
+        return (getBoard().bothPassed() || m_resigned);
+    }
+
+    private ConstBoard getBoard()
+    {
+        return m_game.getBoard();
+    }
+
+    private ConstNode getCurrentNode()
+    {
+        return m_game.getCurrentNode();
+    }
+
+    private File getFile(int gameIndex)
+    {
+        if (m_useXml)
+            return new File(m_filePrefix + "-" + gameIndex + ".xml");
+        else
+            return new File(m_filePrefix + "-" + gameIndex + ".sgf");
+    }
+
+    private GoColor getToMove()
+    {
+        return m_game.getToMove();
+    }
+
+    private ConstGameTree getTree()
+    {
+        return m_game.getTree();
+    }
+
+    private File getResultFile()
+    {
+        return new File(m_filePrefix + ".dat");
+    }
+
+    private String getTitle()
+    {
+        StringBuilder buffer = new StringBuilder();
+        String nameBlack = m_black.getLabel();
+        String nameWhite = m_white.getLabel();
+        if (isAlternated())
+        {
+            String tmpName = nameBlack;
+            nameBlack = nameWhite;
+            nameWhite = tmpName;
+        }
+        buffer.append(nameWhite);
+        buffer.append(" vs ");
+        buffer.append(nameBlack);
+        buffer.append(" (B)");
+        if (! m_filePrefix.equals(""))
+        {
+            buffer.append(" (");
+            buffer.append(m_gameIndex + 1);
+            buffer.append(')');
+        }
+        return buffer.toString();
+    }
+
+    private void handleEndOfGame(boolean error, String errorMessage)
+        throws ErrorMessage
+    {
+        try
+        {
+            String resultBlack;
+            String resultWhite;
+            String resultReferee;
+            if (m_resigned)
+            {
+                String result = (m_resignColor == BLACK ? "W" : "B");
+                result = result + "+R";
+                resultBlack = result;
+                resultWhite = result;
+                resultReferee = result;
+            }
+            else
+            {
+                resultBlack = m_black.getResult();
+                resultWhite = m_white.getResult();
+                resultReferee = "?";
+                if (m_referee != null)
+                    resultReferee = m_referee.getResult();
+            }
+            double cpuTimeBlack = m_black.getAndClearCpuTime();
+            double cpuTimeWhite = m_white.getAndClearCpuTime();
+            double realTimeBlack = m_realTime.get(BLACK);
+            double realTimeWhite = m_realTime.get(WHITE);
+            if (isAlternated())
+            {
+                resultBlack = inverseResult(resultBlack);
+                resultWhite = inverseResult(resultWhite);
+                resultReferee = inverseResult(resultReferee);
+                realTimeBlack = m_realTime.get(WHITE);
+                realTimeWhite = m_realTime.get(BLACK);
+            }
+            ArrayList<Compare.Placement> moves
+                = Compare.getPlacements(getTree().getRootConst());
+            String duplicate =
+                Compare.checkDuplicate(getBoard(), moves, m_games,
+                                       m_alternate, isAlternated());
+            // If a program is dead we wait for a few seconds, because it
+            // could be because the TwoGtp process was killed and we don't
+            // want to write a result in this case.
+            if (m_black.isProgramDead() || m_white.isProgramDead()
+            		|| m_alice.isProgramDead() || m_albert.isProgramDead()
+            		|| m_john.isProgramDead() || m_francesco.isProgramDead())
+            {
+                try
+                {
+                    Thread.sleep(3000);
+                }
+                catch (InterruptedException e)
+                {
+                    assert false;
+                }
+            }
+            int moveNumber = NodeUtil.getMoveNumber(getCurrentNode());
+            saveResult(resultBlack, resultWhite, resultReferee,
+                       isAlternated(), duplicate, moveNumber, error,
+                       errorMessage, realTimeBlack, realTimeWhite,
+                       cpuTimeBlack, cpuTimeWhite);
+            saveGame(resultBlack, resultWhite, resultReferee);
+            ++m_gameIndex;
+            m_games.add(moves);
+        }
+        catch (FileNotFoundException e)
+        {
+            System.err.println("Could not save game: " + e.getMessage());
+        }
+    }
+
+    private void initGame(int size) throws GtpError
+    {
+        m_game = new Game(size, m_komi, null, null, null);
+        m_realTime.set(BLACK, 0.);
+        m_realTime.set(WHITE, 0.);
+        // Clock is not needed
+        m_game.haltClock();
+        m_resigned = false;
+        if (m_openings != null)
+        {
+            int openingFileIndex;
+            if (m_alternate)
+                openingFileIndex = (m_gameIndex / 2) % m_openings.getNumber();
+            else
+                openingFileIndex = m_gameIndex % m_openings.getNumber();
+            try
+            {
+                m_openings.loadFile(openingFileIndex);
+            }
+            catch (Exception e)
+            {
+                throw new GtpError(e.getMessage());
+            }
+            m_openingFile = m_openings.getFilename();
+            if (m_verbose)
+                System.err.println("Loaded opening " + m_openingFile);
+            if (m_openings.getBoardSize() != size)
+                throw new GtpError("Wrong board size: " + m_openingFile);
+            m_game.init(m_openings.getTree());
+            m_game.setKomi(m_komi);
+            m_lastOpeningNode = NodeUtil.getLast(getTree().getRootConst());
+        }
+        else
+            m_lastOpeningNode = null;
+        synchronizeInit();
+    }
+
+    private String inverseResult(String result)
+    {
+        if (result.indexOf('B') >= 0)
+            return result.replaceAll("B", "W");
+        else if (result.indexOf('W') >= 0)
+            return result.replaceAll("W", "B");
+        else
+            return result;
+    }
+
+    private boolean isAlternated()
+    {
+        return (m_alternate && m_gameIndex % 2 != 0);
+    }
+
+    private boolean isInOpening()
+    {
+        if (m_lastOpeningNode == null)
+            return false;
+        for (ConstNode node = getCurrentNode().getChildConst(); node != null;
+             node = node.getChildConst())
+            if (node == m_lastOpeningNode)
+                return true;
+        return false;
+    }
+
+    private void komi(GtpCommand cmd) throws GtpError
+    {
+        String arg = cmd.getArg();
+        try
+        {
+            Komi komi = Komi.parseKomi(arg);
+            if (! ObjectUtil.equals(komi, m_komi))
+                throw new GtpError("komi is fixed at " + m_komi);
+        }
+        catch (InvalidKomiException e)
+        {
+            throw new GtpError("invalid komi: " + arg);
+        }
+    }
+
+    private void newGame(int size) throws GtpError
+    {
+    	
+    	
+        m_black.getAndClearCpuTime();
+        m_white.getAndClearCpuTime();
+        m_alice.getAndClearCpuTime();
+        m_albert.getAndClearCpuTime();
+        m_john.getAndClearCpuTime();
+        m_francesco.getAndClearCpuTime();        
+        initGame(size);
+        m_gameSaved = false;
+        if (m_timeSettings != null)
+            sendIfSupported("time_settings",
+                            GtpUtil.getTimeSettingsCommand(m_timeSettings));
+        
+        try
+        {
+	    	fstream[0] = new FileWriter(path + "alice-" + m_gameIndex + ".log");
+	    	fstream[1] = new FileWriter(path + "albert-" + m_gameIndex + ".log");
+	    	fstream[2] = new FileWriter(path + "john-" + m_gameIndex + ".log");
+	    	fstream[3] = new FileWriter(path + "francesco-" + m_gameIndex + ".log");
+        }
+        catch (IOException e)
+        {
+        	System.out.println("Error: Could not create the log files");
+        	System.exit(0);
+        }
+    	
+    	for(int i = 0; i < 4; i++)
+    	{
+	    	expertLog[i] = new BufferedWriter(fstream[i]);	    
+    	}
+    }
+
+    private void readGames()
+    {
+        for (int n = 0; n < m_gameIndex; ++n)
+        {
+            File file = getFile(n);
+            if (! file.exists())
+            {
+                System.err.println("Game " + file + " not found");
+                continue;
+            }
+            if (! file.exists())
+                return;
+            try
+            {
+                FileInputStream fileStream = new FileInputStream(file);
+                SgfReader reader =
+                    new SgfReader(fileStream, file, null, 0);
+                ConstNode root = reader.getTree().getRoot();
+                m_games.add(Compare.getPlacements(root));
+            }
+            catch (SgfError e)
+            {
+                System.err.println("Error reading " + file + ": " +
+                                   e.getMessage());
+            }
+            catch (Exception e)
+            {
+                System.err.println("Error reading " + file + ": " +
+                                   e.getMessage());
+            }
+        }
+    }
+
+    private void saveGame(String resultBlack, String resultWhite,
+                          String resultReferee)
+        throws FileNotFoundException
+    {
+        if (m_filePrefix.equals(""))
+            return;
+        String nameBlack = m_black.getLabel();
+        String nameWhite = m_white.getLabel();
+        String blackCommand = m_black.getProgramCommand();
+        String whiteCommand = m_white.getProgramCommand();
+        String blackVersion = m_black.getVersion();
+        String whiteVersion = m_white.getVersion();
+        if (isAlternated())
+        {
+            nameBlack = m_white.getLabel();
+            nameWhite = m_black.getLabel();
+            blackCommand = m_white.getProgramCommand();
+            whiteCommand = m_black.getProgramCommand();
+            blackVersion = m_white.getVersion();
+            whiteVersion = m_black.getVersion();
+            String resultTmp = inverseResult(resultWhite);
+            resultWhite = inverseResult(resultBlack);
+            resultBlack = resultTmp;
+            resultReferee = inverseResult(resultReferee);
+        }
+        m_game.setPlayer(BLACK, nameBlack);
+        m_game.setPlayer(WHITE, nameWhite);
+        if (m_referee != null)
+            m_game.setResult(resultReferee);
+        else if (resultBlack.equals(resultWhite) && ! resultBlack.equals("?"))
+            m_game.setResult(resultBlack);
+        String host = Platform.getHostInfo();
+        StringBuilder comment = new StringBuilder();
+        comment.append("Black command: ");
+        comment.append(blackCommand);
+        comment.append("\nWhite command: ");
+        comment.append(whiteCommand);
+        comment.append("\nBlack version: ");
+        comment.append(blackVersion);
+        comment.append("\nWhite version: ");
+        comment.append(whiteVersion);
+        if (m_openings != null)
+        {
+            comment.append("\nOpening: ");
+            comment.append(m_openingFile);
+        }
+        comment.append("\nResult[Black]: ");
+        comment.append(resultBlack);
+        comment.append("\nResult[White]: ");
+        comment.append(resultWhite);
+        if (m_referee != null)
+        {
+            comment.append("\nReferee: ");
+            comment.append(m_referee.getProgramCommand());
+            comment.append("\nResult[Referee]: ");
+            comment.append(resultReferee);
+        }
+        comment.append("\nHost: ");
+        comment.append(host);
+        comment.append("\nDate: ");
+        comment.append(StringUtil.getDate());
+        m_game.setComment(comment.toString(), getTree().getRootConst());
+        File file = getFile(m_gameIndex);
+        if (m_verbose)
+            System.err.println("Saving " + file);
+        OutputStream out = new FileOutputStream(file);
+        if (m_useXml)
+            new XmlWriter(out, getTree(), "GoGuiTwoGtp:" + Version.get());
+        else
+            new SgfWriter(out, getTree(), "GoGuiTwoGtp", Version.get());
+    }
+
+    private void saveResult(String resultBlack, String resultWhite,
+                            String resultReferee, boolean alternated,
+                            String duplicate, int numberMoves, boolean error,
+                            String errorMessage, double timeBlack,
+                            double timeWhite, double cpuTimeBlack,
+                            double cpuTimeWhite)
+        throws ErrorMessage
+    {
+        if (m_filePrefix.equals(""))
+            return;
+        NumberFormat format = StringUtil.getNumberFormat(1);
+        m_table.startRow();
+        m_table.set("GAME", Integer.toString(m_gameIndex));
+        m_table.set("RES_B", resultBlack);
+        m_table.set("RES_W", resultWhite);
+        m_table.set("RES_R", resultReferee);
+        m_table.set("ALT", alternated ? "1" : "0");
+        m_table.set("DUP", duplicate);
+        m_table.set("LEN", numberMoves);
+        m_table.set("TIME_B", format.format(timeBlack));
+        m_table.set("TIME_W", format.format(timeWhite));
+        m_table.set("CPU_B", format.format(cpuTimeBlack));
+        m_table.set("CPU_W", format.format(cpuTimeWhite));
+        m_table.set("ERR", error ? "1" : "0");
+        m_table.set("ERR_MSG", errorMessage);
+        try
+        {
+            m_table.save(getResultFile());
+        }
+        catch (IOException e)
+        {
+            throw new ErrorMessage("Could not write to: " + getResultFile());
+        }
+    }
+
+    /*private float[][] buildMap(Program expert, int beginX, int endX, int beginY, int endY, GoColor color)
+    		throws GtpError, ErrorMessage
+    {
+    	float[][] map = new float[9][9];
+    	float higher = -1;
+		int higherI = -1;
+		int higherJ = -1;
+		String responseGenmove;
+		boolean passOnly = true;
+		final int OCCUPIED = -999999;
+	    String testMove;
+		String testFirstMove;
+				
+		// I will first suppose a 9x9 board
+		for(int i = beginX; i < endX; i++)
+		   for(int j = beginY; j < endY; j++)
+		   {
+		      GoPoint point = GoPoint.get(i,j);
+		      
+		      //System.out.println(point.toString());
+		      			    
+		      if (color == BLACK)
+		      {
+		    	  String responseLegal = m_black.send("is_legal B " + point.toString());
+	
+		    	  if (Integer.valueOf(responseLegal) == 0)
+		    	  {
+		    		  map[i][j] = OCCUPIED;
+		    		  continue;
+		    	  }
+	
+		    	  expert.send("play B " + point.toString());
+		    	  m_black.send("play B " + point.toString());
+			 
+		    	  testMove = expert.sendCommandGenmove(WHITE);
+		    	  //program.send("genmove W");
+		      }
+		      else
+		      {
+		    	  String responseLegal = m_white.send("is_legal W " + point.toString());
+	
+		    	  if (Integer.valueOf(responseLegal) == 0)
+		    	  {
+		    		  map[i][j] = OCCUPIED;
+		    		  continue;
+		    	  }
+	
+		    	  expert.send("play W " + point.toString());
+		    	  m_white.send("play W " + point.toString());
+			 
+		    	  testMove = expert.sendCommandGenmove(BLACK);
+		    	  //program.send("genmove B");
+		      }
+		      
+		      if (!(testMove.equalsIgnoreCase("pass") || testMove.equalsIgnoreCase("resign")))
+		      {
+		    	  passOnly = false;
+		      }
+		      
+		      			      
+		      // This part looks a bit ugly
+		      if (expert == m_alice) // Fuego
+		      {
+		    	  String responseTmp = expert.send("uct_value");
+		    	  
+		    	  map[i][j] = -Float.valueOf(responseTmp).floatValue();
+		      }
+		      else if (expert == m_albert) // GnuGo
+		      {
+		    	  Pattern p = Pattern.compile("^([BW])\\+(\\d+\\.?\\d*).*");
+		    	  String estimate = expert.send("estimate_score");
+		    	  Matcher m = p.matcher(estimate);
+		    	  			    	  
+		    	  if (m.find())
+		    	  {
+		    		  if (m.group(1).equals("W"))
+		    		  {
+		    			  if (color == BLACK)
+		    				  map[i][j] = -Float.valueOf(m.group(2)).floatValue();
+		    			  else
+		    				  map[i][j] = Float.valueOf(m.group(2)).floatValue();
+		    		  }
+		    		  else
+		    		  {
+		    			  if (color == BLACK)
+		    				  map[i][j] = Float.valueOf(m.group(2)).floatValue();
+		    			  else
+		    				  map[i][j] = -Float.valueOf(m.group(2)).floatValue();
+		    		  }
+		    	  }			    	  
+		      }			      
+		      else if (expert == m_john) // MoGo
+		      {			    	  			    	  
+		    	  String estimate = expert.send("show_evaluation");
+		    	  
+		    	  if (color == BLACK)
+		    		  map[i][j] = Float.valueOf(estimate).floatValue();
+		    	  else
+		    		  map[i][j] = -Float.valueOf(estimate).floatValue();
+		      }
+		      else if (expert == m_francesco) // Monte Carlo GnuGo
+		      {
+		    	  Pattern p = Pattern.compile("^([BW])\\+(\\d+\\.?\\d*).*");
+		    	  String estimate = expert.send("estimate_score");
+		    	  Matcher m = p.matcher(estimate);
+		    	  			    	  
+		    	  if (m.find())
+		    	  {
+		    		  if (m.group(1).equals("W"))
+		    		  {
+		    			  if (color == BLACK)
+		    				  map[i][j] = -Float.valueOf(m.group(2)).floatValue();
+		    			  else
+		    				  map[i][j] = Float.valueOf(m.group(2)).floatValue();
+		    		  }
+		    		  else
+		    		  {
+		    			  if (color == BLACK)
+		    				  map[i][j] = Float.valueOf(m.group(2)).floatValue();
+		    			  else
+		    				  map[i][j] = -Float.valueOf(m.group(2)).floatValue();
+		    		  }
+		    	  }			    	  
+		      }
+		      
+		      if (!testMove.equalsIgnoreCase("resign"))
+		    	  expert.send("undo");
+		      
+		      expert.send("undo");
+		      if (color == BLACK)
+		    	  m_black.send("undo");
+		      else
+		    	  m_white.send("undo");
+		   }		
+    	return map;
+    }*/
+    
+    private float[][] buildQuickMap(Program expert, int beginX, int endX, int beginY, int endY, GoColor color)
+    		throws GtpError, ErrorMessage
+    {
+    	String moveValues;    	
+    	Scanner in;
+    	float[][] map = new float[9][9];
+    	String movestr;
+    	GoPoint move;
+    	final int OCCUPIED = -999999;
+    	
+    	if (expert == m_alice)
+    	{
+    		moveValues = expert.send("uct_value");
+    	}
+    	else if (expert == m_john)
+    	{
+    		moveValues = expert.send("pachi-result");
+    	}
+    	else
+    	{
+    		moveValues = expert.send("all_move_values");
+    	}
+    	
+    	in = new Scanner(moveValues);
+    	
+    	// It might be a good idea to initialize the maps with OCCUPIED for all positions...
+    	
+    	while(in.hasNext())
+    	{
+    		movestr = in.next();    		
+    		try
+    		{
+    			move = GtpUtil.parsePoint(movestr, getBoard().getSize());
+    		}
+    		catch (GtpResponseFormatError e)
+    		{
+    			throw new GtpError("Error reading the program's map.");
+    		}
+    			
+    		if (expert == m_alice) // Alice minimizes, I want to maximize
+    		{
+    			if (movestr.equals("PASS"))
+    				in.nextFloat();
+    			else
+    				map[move.getX()][move.getY()] = 1f - in.nextFloat();
+    		}
+    		else if (expert == m_john)
+    		{
+    			if (movestr.equals("pass"))
+    				in.nextFloat();
+    			else
+    			{
+    				map[move.getX()][move.getY()] = in.nextFloat(); // ** I think I will have to do 1 - evaluation for white
+    				/*if (map[move.getX()][move.getY()] == 1.0) // I have to check, but I don't believe in the 1.0 moves
+        			{
+        				map[move.getX()][move.getY()] = 0;
+        				System.out.println("Warning! Ignoring 1.0 movement for John at " + move.getX() + ", " + move.getY());
+        			}*/
+    			}
+    			
+    		}
+    		else
+    		{
+    			map[move.getX()][move.getY()] = in.nextFloat();
+    		}
+    	}    		
+    	
+    	for(int i = beginX; i < endX; i++)
+ 		   for(int j = beginY; j < endY; j++)
+ 		   {
+ 		      GoPoint point = GoPoint.get(i,j);
+ 		      String responseLegal;
+ 		      //System.out.println(point.toString());
+ 		      			    
+ 		      if (color == BLACK) 		      
+ 		    	  responseLegal = m_black.send("is_legal B " + point.toString());
+ 		      else
+ 		    	 responseLegal = m_white.send("is_legal W " + point.toString());
+ 	
+	    	  if (Integer.valueOf(responseLegal) == 0)
+	    	  {
+	    		  map[i][j] = OCCUPIED;
+	    		  continue;
+	    	  } 		      
+ 		   }
+    	
+    	return map;
+    }
+    
+    private int[] findMax(float map[][], int beginX, int endX, int beginY, int endY)
+    {
+    	int[] max = new int[2];
+    	float highest = -999999;
+    	
+    	for(int i = beginX; i < endX; i++)
+    		for(int j = beginY; j < endY; j++)
+    		{
+    			if (map[i][j] > highest)
+    			{
+    				highest = map[i][j];
+    				max[0] = i;
+    				max[1] = j;
+    			}
+    		}    		
+    	    	
+    	return max;
+    }
+    
+    private int mapVote(int[] vote, int beginX, int endX, int beginY, int endY)
+    {
+    	int d = (endX - beginX)/2;
+    	
+    	if (vote[0] <= beginX + d && vote[1] <= beginY + d)
+    		return 0;
+    	else if (vote[0] <= beginX + d && vote[1] > beginY + d)
+    		return 1;
+    	else if (vote[0] > beginX + d && vote[1] <= beginY + d)
+    		return 2;
+    	else if (vote[0] > beginX + d && vote[1] > beginY + d)
+    		return 3;
+    	
+    	return -1; // Error
+    }
+        
+    /*private String getPoint(GoPoint p) // From SgfWriter
+    {
+        if (p == null)
+            return "";
+        int x = 'a' + p.getX();
+        int y = 'a' + (m_size - p.getY() - 1);
+        return "" + (char)x + (char)y;
+    }*/
+
+    private String lastOponentMovement = "";
+    
+    private void undo(Program expert) // Special undo function for Pachi
+    		throws GtpError
+    {
+    	ConstGameTree tree = getTree();
+    	ConstNode node = tree.getRootConst();
+    	Move move;
+    	
+    	expert.send("clear_board");
+    	
+    	while (node.getNumberChildren() == 1)
+    	{
+    		move = node.getMove();
+
+    		if (move != null)
+    		{
+    			//String point = getPoint(move.getPoint()); // What about pass?
+    			GoPoint pointTmp = move.getPoint();
+    			String point;
+    			
+    			if (pointTmp != null)
+    				point = pointTmp.toString();
+    			else
+    				point = "pass";
+    			
+    			if (move.getColor() == BLACK)
+    				expert.send("play B " + point);
+    			else
+    				expert.send("play W " + point);
+    		}
+            
+            node = node.getChildConst();
+    	}
+    	
+    	if (!lastOponentMovement.equals("")) // For some reason, the last oponent movement seemed to be missing...
+    	{
+    		expert.send("play " + oponentColorShort + " " + lastOponentMovement);
+    	}
+    }
+    
+    private boolean zeroMap(float map[][], int beginX, int endX, int beginY, int endY)
+    {
+    	for(int i = beginX; i < endX; i++)
+    	{
+    		for(int j = beginY; j < endY; j++)
+    		{
+    			if (map[i][j] != 0)
+    				return false;
+    		}    		
+    	}
+    	
+    	return true;
+    }
+    
+    private int moveNumber = -1;
+    
+    private void sendGenmove(GoColor color, StringBuilder response)
+        throws GtpError, ErrorMessage, GtpResponseFormatError //Adding "GtpResponseFormatError" here for a while... 
+    {
+        checkInconsistentState();
+        int moveNumber = m_game.getMoveNumber();
+        if (m_maxMoves >= 0 && moveNumber > m_maxMoves)
+            throw new GtpError("move limit exceeded");
+        if (isInOpening())
+        {
+            ConstNode child = getCurrentNode().getChildConst();
+            Move move = child.getMove();
+            if (move.getColor() != color)
+                throw new GtpError("next opening move is " + move);
+            m_game.gotoNode(child);
+            synchronize();
+            response.append(GoPoint.toString(move.getPoint()));
+            return;
+        }
+        Program program;
+        boolean exchangeColors =
+            (color == BLACK && isAlternated())
+            || (color == WHITE && ! isAlternated());
+        if (exchangeColors)
+            program = m_white;
+        else
+            program = m_black;
+        long timeMillis = System.currentTimeMillis();
+
+        // SORIANO: MODIFICATION POINT
+        String responseGenmove = "-1";
+        
+        float[][][] map = new float[4][9][9];
+        boolean hasMap[] = {false, false, false, false};
+        boolean reevaluate[] = {false, false, false, false};
+		int[][] vote = new int[4][2];
+		int[] regions = {0, 0, 0, 0};
+		int[] voteRegion = new int[4];
+		String[] names = {"Alice", "Albert", "John", "Francesco"};
+		int maxRegion[] = {-1, -1, -1, -1};
+		int finalMaxRegion;
+		int maxRegionPos = -1;
+		int maxRegionValue = -1;
+		int beginX = 0;
+		int beginY = 0;
+		int endX = 9;
+		int endY = 9;
+		int playX = -1;
+		int playY = -1;
+		GoPoint bestMove;		
+		boolean ignoreExpert[] = {false, false, false, false};
+		int votesResign = 0;
+		int votesPass = 0;
+		boolean pass = false;
+		boolean resign = false;
+		int numExpertsAlive = 0;
+		boolean openingBook = false;		
+		
+		moveNumber++;
+		
+		if (color == myColor)
+		{			
+			// The repetition looks terrible...
+			if (!m_alice.isProgramDead())	
+			{			
+				numExpertsAlive++;
+				
+				String testFirstMove = m_alice.sendCommandGenmove(color);
+				
+				if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass"))
+				{
+					responseGenmove = testFirstMove;
+					
+					System.out.println(testFirstMove);
+					
+					m_alice.send("showboard"); // For debug
+					
+					ignoreExpert[0] = true;
+					
+					if (testFirstMove.equalsIgnoreCase("resign")) // ** I guess I can't undo a resign...
+						votesResign++;
+					if (testFirstMove.equalsIgnoreCase("pass"))
+					{
+						votesPass++;
+						m_alice.send("undo");
+					}
+				}
+				else
+				{
+					map[0] = buildQuickMap(m_alice, beginX, endX, beginY, endY, color);
+					hasMap[0] = true;
+					m_alice.send("undo");
+					//map[0] = buildMap(m_alice, color);
+					GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
+					vote[0][0] = tmp.getX();
+					vote[0][1] = tmp.getY();
+					
+					if (zeroMap(map[0], 0, 9, 0, 9)) // Is Alice playing opening book?..
+					{
+						openingBook = true;
+						
+						responseGenmove = testFirstMove;
+						
+						System.out.println("Playing opening book move " + responseGenmove);
+						
+						program.send("play " + myColorShort + " " + responseGenmove);	
+					}
+					else if (moveNumber <= 13) // Is Alice playing opening book?.. // Should be 14 for black?..
+					{
+						openingBook = true;
+						
+						responseGenmove = testFirstMove;
+						
+						System.out.println("This might be an opening book move... Playing " + responseGenmove);
+						
+						program.send("play " + myColorShort + " " + responseGenmove);	
+					}
+				}
+			}
+			else
+				ignoreExpert[0] = true;
+			if (!m_albert.isProgramDead())
+			{
+				numExpertsAlive++;
+				
+				String testFirstMove = m_albert.sendCommandGenmove(color);
+				
+				if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass"))
+				{
+					responseGenmove = testFirstMove;
+					
+					System.out.println(testFirstMove);
+					
+					m_albert.send("showboard"); // For debug
+					
+					ignoreExpert[1] = true;
+					
+					if (testFirstMove.equalsIgnoreCase("resign")) // ** I guess I can't undo a resign...
+						votesResign++;
+					if (testFirstMove.equalsIgnoreCase("pass"))
+					{
+						votesPass++;
+						m_albert.send("undo");
+					}
+				}
+				else
+				{
+					map[1] = buildQuickMap(m_albert, beginX, endX, beginY, endY, color);
+					hasMap[1] = true;
+					m_albert.send("undo");
+					//map[1] = buildMap(m_albert, color);
+					GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
+					vote[1][0] = tmp.getX();
+					vote[1][1] = tmp.getY();
+				}
+			}
+			else
+				ignoreExpert[1] = true;
+			if (!m_john.isProgramDead())
+			{
+				numExpertsAlive++;
+				
+				String testFirstMove = m_john.sendCommandGenmove(color);
+				
+				if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass"))
+				{
+					responseGenmove = testFirstMove;
+					
+					System.out.println(testFirstMove);
+					
+					//m_john.send("showboard"); // For debug // Pachi can't showboard
+					
+					ignoreExpert[2] = true;
+					
+					if (testFirstMove.equalsIgnoreCase("resign"))
+						votesResign++;
+					if (testFirstMove.equalsIgnoreCase("pass")) // ** I guess I can't undo a resign...
+					{
+						votesPass++;
+						m_john.send("undo");
+					}
+				}
+				else
+				{
+					map[2] = buildQuickMap(m_john, beginX, endX, beginY, endY, color);
+					hasMap[2] = true;
+					undo(m_john);
+					//map[2] = buildMap(m_john, color);
+					GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
+					vote[2][0] = tmp.getX();
+					vote[2][1] = tmp.getY();
+				}
+			}
+			else
+				ignoreExpert[2] = true;
+			if (!m_francesco.isProgramDead())
+			{
+				numExpertsAlive++;
+				
+				String testFirstMove = m_francesco.sendCommandGenmove(color);
+				
+				if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass"))
+				{
+					responseGenmove = testFirstMove;
+					
+					System.out.println(testFirstMove);
+					
+					m_francesco.send("showboard"); // For debug
+					
+					ignoreExpert[3] = true;
+					
+					if (testFirstMove.equalsIgnoreCase("resign")) // ** I guess I can't undo a resign...
+						votesResign++;
+					if (testFirstMove.equalsIgnoreCase("pass"))
+					{
+						votesPass++;
+						m_francesco.send("undo");
+					}
+				}
+				else
+				{
+					map[3] = buildQuickMap(m_francesco, beginX, endX, beginY, endY, color);
+					hasMap[3] = true;
+					
+					m_francesco.send("undo");
+					//map[3] = buildMap(m_francesco, color);
+					
+					GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
+					vote[3][0] = tmp.getX();
+					vote[3][1] = tmp.getY();
+				}
+			}
+			else
+				ignoreExpert[3] = true;
+					
+			
+			//recursiveVotes(map);			
+		
+			if (!openingBook)
+			{
+				for(int d = 0; d < 3; d++)
+				{
+					// I don't need to build a map for the 1st interaction
+					
+					if (d != 0)
+					{					
+						for(int i = 0; i < 4; i++)
+						{
+							if (ignoreExpert[i])
+							{
+								System.out.println("Warning! I am ignoring " + names[i]);
+								continue;
+							}
+							
+							if (!hasMap[i] && reevaluate[i])
+							{
+								/*if (i == 0)
+									map[i] = buildMap(m_alice, beginX, endX, beginY, endY, color);*/
+								/*if (i == 1)
+									map[i] = buildQuickMap(m_albert, beginX, endX, beginY, endY, color);*/
+								/*if (i == 2)
+								{
+									map[i] = buildMap(m_john, beginX, endX, beginY, endY, color);
+									if (moveNumber < 5)
+									{
+										ignoreExpert[i] = true;
+										System.out.println("Warning! I am afraid of opening book problem, so I am ignoring John");
+									}
+								}*/
+								/*if (i == 3)
+									map[i] = buildQuickMap(m_francesco, beginX, endX, beginY, endY, color);*/
+								System.out.println("Error!.. Everyone should have a map by now...");
+								hasMap[i] = true;
+							}
+			
+							if (reevaluate[i])
+							{
+								if (zeroMap(map[i], beginX, endX, beginY, endY))
+								{
+									ignoreExpert[i] = true;
+									System.out.println("Warning! Zero map, so I am ignoring " + names[i]);
+								}						
+							}
+							
+							if (hasMap[i])
+							{
+								System.out.println("Map for " + names[i]);
+							
+								for(int x = endX - 1; x >= beginX; x--)
+								{
+									for(int y = endY - 1; y >= beginY; y--)
+									{
+										System.out.print(map[i][x][y] + " ");
+									}
+									System.out.println();
+								}
+							}
+							else
+								System.out.println(names[i] + " doesn't need a map yet");
+						}
+					}
+					
+					System.out.println("Dividing at " + (endX - beginX)/2);
+					
+			    	for(int i = 0; i < 4; i++)
+					{
+			    		if (ignoreExpert[i])
+			    		{
+							System.out.println("Warning! I am ignoring " + names[i]);
+			    			continue;
+			    		}
+			    		
+			    		if (d != 0)
+			    		{
+			    			if (reevaluate[i])
+			    				vote[i] = findMax(map[i], beginX, endX, beginY, endY);
+			    		}
+													
+						//voteRegion = mapVote(vote[i], (endX - beginX)/2);
+						voteRegion[i] = mapVote(vote[i], beginX, endX, beginY, endY);
+						
+						System.out.println(names[i] + " votes: " + GoPoint.get(vote[i][0], vote[i][1]).toString() + " Region: " + voteRegion[i]);
+						
+						regions[voteRegion[i]]++;
+					}
+							
+					for(int i = 0; i < 4; i++)
+					{
+						System.out.println("Region: " + i + " # of votes: " + regions[i]);
+						
+						if (regions[i] > maxRegionValue)
+						{
+							maxRegionValue = regions[i];
+							maxRegion[0] = i;
+							maxRegionPos = 1;
+						}
+						else if (regions[i] == maxRegionValue)
+						{
+							maxRegion[maxRegionPos] = i;
+							maxRegionPos++;
+						}
+					}
+					
+					finalMaxRegion = maxRegion[generator.nextInt(maxRegionPos)];
+					
+					System.out.println("Moving on to region " + finalMaxRegion);
+					
+					for(int i = 0; i < 4; i++)
+					{
+						try
+						{
+							if (ignoreExpert[i])
+							{
+								expertLog[i].write(moveNumber + ", " + d + ", -1 \n");
+							}
+							else
+							{
+								if (voteRegion[i] != finalMaxRegion)
+								{
+									reevaluate[i] = true;
+									
+									System.out.println(names[i] + " is going to reevaluate his vote...");
+																
+									expertLog[i].write(moveNumber + ", " + d + ", 0, " + GoPoint.get(vote[i][0], vote[i][1]).toString() + ", " + map[i][vote[i][0]][vote[i][1]] + "\n");
+								}
+								else
+								{
+									reevaluate[i] = false;
+									
+									System.out.println(names[i] + " can keep his vote...");
+									
+									expertLog[i].write(moveNumber + ", " + d + ", 1, " + GoPoint.get(vote[i][0], vote[i][1]).toString() + ", " + map[i][vote[i][0]][vote[i][1]] + "\n");
+								}
+							}
+						}
+						catch(IOException e)
+						{
+							System.out.println("Error writing log");
+						}						
+					}
+					
+					/*if (d == 0) //To test...
+						maxRegion = 3;
+					else if (d == 1)
+						maxRegion = 2;
+					else if (d == 2)
+						maxRegion = 1;
+					else if (d == 3)
+						maxRegion = 0;*/
+					
+					if (finalMaxRegion == 0) // Top left
+					{
+						endX = beginX + (endX - beginX)/2 + 1;
+						endY = beginY + (endY - beginY)/2 + 1;
+					}
+					else if (finalMaxRegion == 1) // Bottom left
+					{
+						endX = beginX + (endX - beginX)/2 + 1;
+						beginY = beginY + (endY - beginY)/2;
+					}
+					else if (finalMaxRegion == 2) // Top right
+					{
+						beginX = beginX + (endX - beginX)/2;
+						endY = beginY + (endY - beginY)/2 + 1;
+					}
+					else if (finalMaxRegion == 3) // Bottom right
+					{		
+						beginX = beginX + (endX - beginX)/2;
+						beginY = beginY + (endY - beginY)/2;
+					}
+					
+					System.out.println("BeginX: " + beginX + " EndX: " + endX + " BeginY: " + beginY + " EndY: " + endY);
+					
+					for(int i = 0; i < 4; i++)
+					{
+						regions[i] = 0;
+						maxRegion[i] = -1;
+					}
+					
+					maxRegionPos = -1;
+					maxRegionValue = -1;
+					finalMaxRegion = -1;
+				}
+				
+				for(int i = 0; i < 4; i++)
+				{
+					if (ignoreExpert[i])
+					{
+						System.out.println("Warning! I am ignoring " + names[i]);
+						continue;
+					}
+					
+					if (!hasMap[i] && reevaluate[i])
+					{
+						/*if (i == 0)
+							map[i] = buildMap(m_alice, beginX, endX, beginY, endY, color);*/
+						/*if (i == 1)
+							map[i] = buildMap(m_albert, beginX, endX, beginY, endY, color);*/
+						/*if (i == 2)
+							map[i] = buildMap(m_john, beginX, endX, beginY, endY, color);*/
+						/*if (i == 3)
+							map[i] = buildMap(m_francesco, beginX, endX, beginY, endY, color);*/
+						
+						System.out.println("Error!.. Everyone should have a map by now...");
+						
+						hasMap[i] = true;
+					}
+	
+					if (reevaluate[i])
+					{
+						if (zeroMap(map[i], beginX, endX, beginY, endY))
+						{
+							ignoreExpert[i] = true;
+							System.out.println("Warning! Zero map, so I am ignoring " + names[i]);
+						}
+					}
+					
+					if (hasMap[i])
+					{
+						System.out.println("Map for " + names[i]);
+					
+						for(int x = endX - 1; x >= beginX; x--)
+						{
+							for(int y = endY - 1; y >= beginY; y--)
+							{
+								System.out.print(map[i][x][y] + " ");
+							}
+							System.out.println();
+						}
+					}
+					else
+						System.out.println(names[i] + " doesn't need a map yet");
+				}
+				
+				System.out.println("Final iteration!.. :)");
+				
+		    	for(int i = 0; i < 4; i++)
+				{
+		    		if (ignoreExpert[i])
+		    		{
+						System.out.println("Warning! I am ignoring " + names[i]);
+		    			continue;
+		    		}
+		    		
+	    			if (reevaluate[i])
+	    				vote[i] = findMax(map[i], beginX, endX, beginY, endY);
+															
+					voteRegion[i] = -1;
+					
+					if (vote[i][0] == beginX && vote[i][1] == beginY)
+						voteRegion[i] = 0;
+					else if (vote[i][0] == beginX && vote[i][1] == (endY - 1))
+						voteRegion[i] = 1;
+					else if (vote[i][0] == (endX - 1) && vote[i][1] == beginY)
+						voteRegion[i] = 2;
+					else if (vote[i][0] == (endX - 1) && vote[i][1] == (endY - 1))
+						voteRegion[i] = 3;
+					
+					regions[voteRegion[i]]++;
+					
+					System.out.println(names[i] + " votes: " + GoPoint.get(vote[i][0], vote[i][1]).toString() + " Region: " + voteRegion[i]);
+				}
+						
+				for(int i = 0; i < 4; i++)
+				{
+					System.out.println("Region: " + i + " # of votes: " + regions[i]);
+					
+					if (regions[i] > maxRegionValue)
+					{
+						maxRegionValue = regions[i];
+						maxRegion[0] = i;
+						maxRegionPos = 1;
+					}
+					else if (regions[i] == maxRegionValue)
+					{
+						maxRegion[maxRegionPos] = i;
+						maxRegionPos++;
+					}
+				}
+				
+				finalMaxRegion = maxRegion[generator.nextInt(maxRegionPos)];
+				
+				System.out.println("Moving on to region " + finalMaxRegion);
+				
+				if (finalMaxRegion == 0)
+				{
+					playX = beginX;
+					playY = beginY;
+				}
+				else if (finalMaxRegion == 1)
+				{
+					playX = beginX;
+					playY = (endY - 1);
+				}
+				else if (finalMaxRegion == 2)
+				{
+					playX = (endX - 1);
+					playY = beginY;
+				}
+				else if (finalMaxRegion == 3)
+				{
+					playX = (endX - 1);
+					playY = (endY - 1);
+				}
+						
+				
+				for(int i = 0; i < 4; i++)
+				{
+					try
+					{
+						if (ignoreExpert[i])
+						{
+							expertLog[i].write(moveNumber + ", 3, -1 \n");
+						}
+						else
+						{
+							if (voteRegion[i] != finalMaxRegion)
+							{														
+								expertLog[i].write(moveNumber + ", 3, 0, " + GoPoint.get(vote[i][0], vote[i][1]).toString() + ", " + map[i][vote[i][0]][vote[i][1]] + "\n");
+							}
+							else
+							{
+								expertLog[i].write(moveNumber + ", 3, 1, " + GoPoint.get(vote[i][0], vote[i][1]).toString() + ", " + map[i][vote[i][0]][vote[i][1]] + "\n");
+							}
+						}
+					}
+					catch(IOException e)
+					{
+						System.out.println("Error writing log");
+					}						
+				}
+				
+				String showboard = program.send("showboard");
+				
+				System.out.println(showboard);
+				
+				if ((votesPass + votesResign) != numExpertsAlive)
+				{
+					bestMove = GoPoint.get(playX, playY);
+						
+					if (color == BLACK)
+					{
+						program.send("play B " + bestMove.toString());
+						System.out.println("play B " + bestMove.toString());
+					}
+					else
+					{
+						program.send("play W " + bestMove.toString());
+						System.out.println("play W " + bestMove.toString());
+					}
+					
+					responseGenmove = bestMove.toString();
+				}
+				else
+				{
+					System.out.println("Ooops!.. Is it a pass or a resign?..");
+					
+			    	if (votesPass > 0) // If at least one wants to pass, I will pass
+			    		responseGenmove = "pass";		    		    			    	
+				}
+			}			
+		}
+		else
+		{
+			responseGenmove = program.sendCommandGenmove(color);
+			lastOponentMovement = responseGenmove;
+		}
+		
+	    double time = (System.currentTimeMillis() - timeMillis) / 1000.;
+	    m_realTime.set(color, m_realTime.get(color) + time);
+	    if ((color == oponentColor && responseGenmove.equalsIgnoreCase("resign")) ||
+	    	(color == myColor && votesResign == numExpertsAlive))
+	    {
+	        response.append("resign");
+	        m_resigned = true;
+	        m_resignColor = color;
+	    }	    
+	    else
+	    {
+	        ConstBoard board = getBoard();
+	        GoPoint point = null;
+	        	        
+	        try
+	        {
+	            point = GtpUtil.parsePoint(responseGenmove, board.getSize());
+	        }
+	        catch (GtpResponseFormatError e)
+	        {
+	            throw new GtpError(program.getLabel()
+	                               + " played invalid move: "
+	                               + responseGenmove);
+	        }
+	        Move move = Move.get(color, point);
+	        m_game.play(move);
+	        program.updateAfterGenmove(board);
+	        synchronize();
+	        response.append(GoPoint.toString(move.getPoint()));
+	    }
+	    if (gameOver() && ! m_gameSaved)
+	    {
+	        handleEndOfGame(false, "");
+	        m_gameSaved = true;
+	        
+	        moveNumber = -1;
+	        lastOponentMovement = "";
+	        
+	        for(int i = 0; i < 4; i++)
+	        {
+	        	try
+	        	{
+	        		expertLog[i].close();
+	        	}
+	        	catch (IOException e)
+	        	{
+	        		System.out.println("Error closing log file");
+	        		System.exit(0);
+	        	}
+	        }
+	    }
+    }
+
+    private void sendIfSupported(String cmd, String cmdLine)
+    {
+        for (Program program : m_allPrograms)
+            program.sendIfSupported(cmd, cmdLine);
+    }
+
+    private void synchronize() throws GtpError
+    {
+        for (Program program : m_allPrograms)
+            program.synchronize(m_game);
+    }
+
+    private void synchronizeInit() throws GtpError
+    {
+        for (Program program : m_allPrograms)
+            program.synchronizeInit(m_game);
+    }
+
+    private void twogtpColor(Program program, GtpCommand cmd) throws GtpError
+    {
+        cmd.setResponse(program.send(cmd.getArgLine()));
+    }
+
+    private void twogtpObserver(GtpCommand cmd) throws GtpError
+    {
+        if (m_observer == null)
+            throw new GtpError("no observer enabled");
+        twogtpColor(m_observer, cmd);
+    }
+
+    private void twogtpReferee(GtpCommand cmd) throws GtpError
+    {
+        if (m_referee == null)
+            throw new GtpError("no referee enabled");
+        twogtpColor(m_referee, cmd);
+    }
+}

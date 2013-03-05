@@ -1,0 +1,17 @@
+# Black: Fuego
+# BlackCommand: /home/soriano/pesquisa/desenvolvimento/go/fuego-1.1/fuegomain/fuego --config /home/soriano/pesquisa/desenvolvimento/go/configGroupGo/configSlow
+# BlackLabel: Fuego:1.1
+# BlackVersion: 1.1
+# Date: February 22, 2012 10:10:40 PM PST
+# Host: sushi (Intel(R) Core(TM) i7-2760QM CPU @ 2.40GHz)
+# Komi: 6.5
+# Referee: -
+# Size: 9
+# White: Fuego
+# WhiteCommand: /home/soriano/pesquisa/desenvolvimento/go/fuego-1.1/fuegomain/fuego --config /home/soriano/pesquisa/desenvolvimento/go/configGroupGo/configSlow
+# WhiteLabel: Fuego:1.1
+# WhiteVersion: 1.1
+# Xml: 0
+#
+#GAME	RES_B	RES_W	RES_R	ALT	DUP	LEN	TIME_B	TIME_W	CPU_B	CPU_W	ERR	ERR_MSG
+0	B+R	B+R	B+R	0	-	65	555.5	39.9	0.1	157.6	0	

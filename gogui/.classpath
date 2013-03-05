@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="lib" path="external/jgoodies/looks-2.2.2/looks-2.2.2.jar"/>
+	<classpathentry kind="lib" path="external/quaqua/Quaqua/dist/quaqua.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-adapter.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-client.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-convert.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-display.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-dummy.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-regress.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-server.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-statistics.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-terminal.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-thumbnailer.jar"/>
+	<classpathentry kind="lib" path="lib/gogui-twogtp.jar"/>
+	<classpathentry kind="lib" path="lib/gogui.jar"/>
+	<classpathentry kind="lib" path="lib/looks-2.2.2.jar"/>
+	<classpathentry kind="lib" path="lib/quaqua.jar"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="output" path="build"/>
+</classpath>

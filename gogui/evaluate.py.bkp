@@ -1,0 +1,39 @@
+#!/usr/bin/python
+
+import os
+import sys
+import subprocess
+
+numNodesBlack = 5;
+numNodesWhite = 4;
+numGames = 100;
+
+gamesPerNodeBlack = numGames/numNodesBlack;
+gamesPerNodeWhite = numGames/numNodesWhite;
+
+base = "/home/rcf-proj/ls/sorianom/go";
+
+gogui = base + "/groupGoSimple/bin/gogui-twogtp";
+results = base + "/experiments/current/" + sys.argv[1] + "/";
+
+
+os.system("cp " + results + "resultb-0.dat " + results + "resultb.dat");
+os.system("cp " + results + "resultw-0.dat " + results + "resultw.dat");
+
+positionBlack = gamesPerNodeBlack;
+positionWhite = gamesPerNodeWhite;
+
+while positionBlack < numGames:
+    os.system("tail --lines=+17 " + results + "resultb-" + str(positionBlack) + ".dat > " + results + "resultb-" + str(positionBlack) + ".dat.clean");
+    os.system("cat " + results + "resultb-" + str(positionBlack) + ".dat.clean >> " + results + "resultb.dat");
+
+    positionBlack = positionBlack + gamesPerNodeBlack;
+
+while positionWhite < numGames:
+    os.system("tail --lines=+17 " + results + "resultw-" + str(positionWhite) + ".dat > " + results + "resultw-" + str(positionWhite) + ".dat.clean");
+    os.system("cat " + results + "resultw-" + str(positionWhite) + ".dat.clean >> " + results + "resultw.dat");
+
+    positionWhite = positionWhite + gamesPerNodeWhite;
+
+os.system(gogui + " -analyze " + results + "resultb.dat");
+os.system(gogui + " -analyze " + results + "resultw.dat");

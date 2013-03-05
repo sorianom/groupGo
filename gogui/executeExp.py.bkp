@@ -1,0 +1,51 @@
+#!/usr/bin/python
+
+import os
+import sys
+import subprocess
+
+numGames = 50;
+numNodesBlack = 5;
+numNodesWhite = 4;
+
+base = "/home/rcf-proj/ls/sorianom/go";
+
+gamesPerNodeBlack = numGames/numNodesBlack;
+gamesPerNodeWhite = numGames/numNodesWhite;
+
+gogui = base + "/groupGoSimple/bin/gogui-twogtp";
+scriptsBase = base + "/scripts";
+
+experiments = base + "/experiments/current/" + sys.argv[1] + "/";
+
+arg = "-alice \"" + base + "/fuego-1.1/fuegomain/fuego --config " + base + "/configGroupGo/configSlowOneThread\" -aliceWeight " + sys.argv[2] + " -albert \"" + base + "/gnugo-3.8/interface/gnugo --mode gtp\" -albertWeight " + sys.argv[3] + " -john \"" + base + "/pachi/pachi\" -johnWeight " + sys.argv[4] + " -francesco \"" + base + "/MoGo_release3/mogo\" -francescoWeight " + sys.argv[5] + " -white \"" + base + "/fuego-1.1/fuegomain/fuego --config " + base + "/configGroupGo/configSlowOneThread\" -black \"" + base + "/fuego-1.1/fuegomain/fuego --config " + base + "/configGroupGo/configSlowOneThread\" -size 9 -auto -iteration " + sys.argv[1];
+
+subprocess.call(["mkdir",experiments]);
+
+initialBlack = 0;
+for n in range(numNodesBlack):
+    fb = open(scriptsBase + "/exb-" + str(n) + ".sh",'w');
+    fb.write("#!/bin/sh\n\n");
+    
+    fb.write('cd $PBS_O_WORKDIR\n');
+    fb.write(gogui + " " + arg + " -initial " + str(initialBlack) + " -games " + str(gamesPerNodeBlack) + " -groupColor black -sgffile " + experiments + "resultb\n");
+
+    initialBlack = initialBlack + gamesPerNodeBlack;
+
+    fb.close();
+
+    subprocess.Popen("qsub -l walltime=7:00:00,nodes=1:ppn=1,arch=x86_64 " + scriptsBase + "/exb-" + str(n) + ".sh", shell=True);
+
+initialWhite = 0;
+for n in range(numNodesWhite):
+    fw = open(scriptsBase + "/exw-" + str(n) + ".sh",'w');
+    fw.write("#!/bin/sh\n\n");
+    
+    fw.write('cd $PBS_O_WORKDIR\n');
+    fw.write(gogui + " " + arg + " -initial " + str(initialWhite) + " -games " + str(gamesPerNodeWhite) + " -groupColor white -sgffile " + experiments + "resultw\n");
+
+    initialWhite = initialWhite + gamesPerNodeWhite;
+
+    fw.close();
+    
+    subprocess.Popen("qsub -l walltime=7:00:00,nodes=1:ppn=1,arch=x86_64 " + scriptsBase + "/exw-" + str(n) + ".sh", shell=True);

@@ -1,0 +1,17 @@
+(;FF[4]CA[UTF-8]AP[GoGuiTwoGtp:1.1.10]SZ[9]
+KM[6.5]PB[Fuego:1.1]PW[Fuego:1.1]DT[2012-02-15]RE[W+3.5]
+C[Black command: /home/soriano/pesquisa/desenvolvimento/go/fuego-1.1/fuegomain/fuego --config /home/soriano/pesquisa/desenvolvimento/go/configGroupGo/configSlow
+White command: /home/soriano/pesquisa/desenvolvimento/go/fuego-1.1/fuegomain/fuego --config /home/soriano/pesquisa/desenvolvimento/go/configGroupGo/configSlow
+Black version: 1.1
+White version: 1.1
+Result[Black\]: W+3.5
+Result[White\]: W+3.5
+Host: sushi (Intel(R) Core(TM) i7-2760QM CPU @ 2.40GHz)
+Date: February 15, 2012 8:03:11 PM PST]
+;B[ee];W[dg];B[eg];W[fc];B[df];W[dc];B[cd];W[eh];B[cg];W[fg]
+;B[dh];W[gf];B[ge];W[gd];B[ff];W[he];B[gg];W[fe];B[fh];W[cc]
+;B[bc];W[bb];B[bd];W[hg];B[hh];W[ih];B[ab];W[cb];B[ed];W[ec]
+;B[fd];W[ge];B[ig];W[if];B[dd];W[hi];B[gh];W[ii];B[gi];W[ig]
+;B[ba];W[ac];B[ad];W[ca];B[ac];W[aa];B[ie];W[id];B[ba];W[fi]
+;B[fg];W[aa];B[gb];W[ba];B[gc];W[fb];B[hc];W[hd];B[ha];W[ib]
+;B[ga];W[hb];B[];W[])

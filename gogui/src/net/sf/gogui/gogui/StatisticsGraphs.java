@@ -66,7 +66,7 @@ public class StatisticsGraphs extends JComponent {
             for(int i = 0; i < 4; i++)
             {
                 System.out.println(expertsImg[i]);
-               agentsImg[i] = ImageIO.read(new File("../demo/img/" + expertsImg[i]));
+               agentsImg[i] = ImageIO.read(new File("img/" + expertsImg[i]));
             }
         }
         catch(IOException ioe){ioe.printStackTrace();}

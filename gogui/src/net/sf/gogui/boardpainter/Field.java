@@ -250,6 +250,8 @@ public class Field
     private boolean m_markExpert2;
     private boolean m_markExpert3;
     private boolean m_markExpert4;
+    
+    private boolean[] m_markExpert;
 
     private static int s_cachedFontFieldSize;
 
@@ -481,13 +483,10 @@ public class Field
         String expertsImg[] = new String[4];
         try {
 			Scanner scanner = new Scanner(new FileInputStream("experts.txt"));
-			
 			for(int i = 0; i < 4; i++)
 				expertsImg[i] = scanner.nextLine();
-			
 			scanner.close();
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
         
@@ -505,11 +504,6 @@ public class Field
         BufferedImage image_fuego = readImage(expertsImg[1]);
         BufferedImage image_mogo  = readImage(expertsImg[2]);
         BufferedImage image_pachi = readImage(expertsImg[3]);
-        if(m_markExpert1 && m_markExpert2)
-        {
-        	@SuppressWarnings("unused")
-			int asdf = 0;
-        }
         if(m_markExpert1 || m_markExpert2 || m_markExpert3 || m_markExpert4)
         {
 	        if (m_markExpert1)
@@ -520,14 +514,8 @@ public class Field
 	        	overlayImages(img, image_mogo);
 	        if (m_markExpert4)
 	        	overlayImages(img, image_pachi);
-	        m_graphics.drawImage(img, m_graphics.getClipBounds().x, m_graphics.getClipBounds().y, BI_WIDTH, BI_HEIGHT, null);
-	        /*
-	        try {
-				Thread.sleep(500);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-			*/
+	        m_graphics.drawImage(img, m_graphics.getClipBounds().x,
+	        		m_graphics.getClipBounds().y, BI_WIDTH, BI_HEIGHT, null);
         }
         
         if (oldStroke != null)

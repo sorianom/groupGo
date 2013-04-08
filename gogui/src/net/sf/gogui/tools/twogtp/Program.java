@@ -15,7 +15,6 @@ import net.sf.gogui.util.Table;
 
 public class Program
 {
-	
 	public String m_command;
 	
     public Program(String command, String defaultName, String logPrefix,

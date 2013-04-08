@@ -14,6 +14,7 @@ import java.io.BufferedWriter;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.StringTokenizer;
 
 import net.sf.gogui.game.ConstNode;
 import net.sf.gogui.game.ConstGameTree;
@@ -52,35 +53,41 @@ public class TwoGtp
 {
 	private Random generator;
 	private FileWriter[] fstream;
-	// Doug Chen - ADDED:
+	
 	private FileWriter fw_votes;
 	private BufferedWriter[] expertLog;
 	private FileWriter fw_acceptedOpinions;
-	private BufferedWriter acceptedOpinions;
-	
+	private BufferedWriter acceptedOpinions;	
 	private FileWriter fw_freqAgreed;
 	private BufferedWriter freqAgreed;
 	
 	String path;
 	
-	private Integer[] numAccepted = {0, 0, 0, 0};
-	private Integer[] numAgreed = {0, 0, 0, 0};
+	private Integer[] numAccepted;
+	private Integer[] numAgreed;
 	
 	private GoColor myColor;
 	private String myColorShort;
 	private GoColor oponentColor;
-	private String oponentColorShort;	
+	private String oponentColorShort;
+	
+	private static final int SLEEP_TIME = 100;
 	
 	boolean m_useOpeningDB;
 	
     /** Constructor.
         @param komi The fixed komi. See TwoGtp documentation for option -komi
     */
-    public TwoGtp(int iteration, String path, String black, String white, String alice, String albert, String john, String francesco, double [] weights, String groupColor, String referee, String observer,
+	/*
+	 * TwoGtp twoGtp
+        = new TwoGtp(iteration, path, black, white, agentsList, weightsList, groupColor, referee, observer, size, komi,
+        		initialGame, games, alternate, sgfFile, force, verbose, openings, timeSettings, useXml, openingDB);
+	 */
+	// TODO: NOTE that black/white agents are in addition to the numAgents, so there are numAgents+2 (or +1? or +0? not sure)
+    public TwoGtp(int iteration, String path, String black, String white, int numAgents, String agentsList, String weightsList, String groupColor, String referee, String observer,
                   int size, Komi komi, int initialGame, int numberGames, boolean alternate,
-                  String filePrefix, boolean force, boolean verbose,
-                  Openings openings, TimeSettings timeSettings,
-                  boolean useXml, boolean openingDB)
+                  String filePrefix, boolean force, boolean verbose, Openings openings,
+                  TimeSettings timeSettings, boolean useXml, boolean openingDB)
         throws Exception
     {
         super(null);
@@ -88,78 +95,68 @@ public class TwoGtp
         assert size <= GoPoint.MAX_SIZE;
         assert komi != null;
         
-        /*if (groupColor.equals("black"))
-        {
-        	path = "/home/rcf-proj/ls/sorianom/go/black/experiments/current/";
-        	path = path + Integer.toString(iteration) + "/";
-        }
-        else
-        {
-        	path = "/home/rcf-proj/ls/sorianom/go/white/experiments/current/";
-        	//path = "/home/soriano/pesquisa/desenvolvimento/go/groupGoSimple/experiments/current/";
-        	path = path + Integer.toString(iteration) + "/";
-        }*/
-        
         this.path = path + Integer.toString(iteration) + "/";
+        numAccepted = new Integer[numAgents];
+        numAgreed = new Integer[numAgents];
+        for(int i = 0; i < numAgents; i++)
+        {
+        	numAccepted[i] = new Integer(0);
+        	numAgreed[i] = new Integer(0);
+        }
         
-        if (black.equals(""))
-            throw new ErrorMessage("No black program set");
-        if (white.equals(""))
-            throw new ErrorMessage("No white program set");
-        if (alice.equals(""))
-            throw new ErrorMessage("Where is Alice?..");
-        if (albert.equals(""))
-            throw new ErrorMessage("Sorry, can't work without Albert");
-        if (john.equals(""))
-            throw new ErrorMessage("Miss John...");
-        if (francesco.equals(""))
-            throw new ErrorMessage("Gosh, where is Francesco?..");
+        if (black.equals("") || white.equals(""))
+            throw new ErrorMessage("ERROR: No black/white program set");
+        if (agentsList.equals(""))
+            throw new ErrorMessage("ERROR: No agents are set");
+        if (weightsList.equals(""))
+            throw new ErrorMessage("ERROR: No weights are set");
         m_filePrefix = filePrefix;
         m_useXml = useXml;
         File resultFile = getResultFile();
         if (force && resultFile.exists())
             if (! resultFile.delete())
-                throw new ErrorMessage("Could not delete file '" + resultFile
-                                       + "'");
+                throw new ErrorMessage("Could not delete file '" + resultFile + "'");
         m_allPrograms = new ArrayList<Program>();
+        m_somePrograms = new ArrayList<Program>();
         m_black = new Program(black, "Black", "B", verbose);
         m_allPrograms.add(m_black);
-        Thread.sleep(2500);
+        Thread.sleep(SLEEP_TIME);
         m_white = new Program(white, "White", "W", verbose);
         m_allPrograms.add(m_white);
-        Thread.sleep(2500);
-        //m_white = m_black;
-        /*m_alice = new Program(alice, "Alice", "Ali", verbose);
-        m_allPrograms.add(m_alice);*/
+        Thread.sleep(SLEEP_TIME);
         if (groupColor.equals("black"))
         	m_alice = m_black;
         else
         	m_alice = m_white;
-        m_albert = new Program(albert, "Albert", "Alb", verbose);
-        m_allPrograms.add(m_albert);
-        Thread.sleep(2500);
-        m_john = new Program(john, "John", "J", verbose);
-        m_allPrograms.add(m_john);
-        Thread.sleep(2500);
-        m_francesco = new Program(francesco, "Francesco", "F", verbose);
-        m_allPrograms.add(m_francesco);        
+        m_numAgents = numAgents;
+        
+        StringTokenizer st_agents = new StringTokenizer(agentsList, "|");
+        for(int i = 0; i < numAgents; i++) {
+        	Program temp = new Program(st_agents.nextToken(), "Program"+(i+1), "P"+(i+1), verbose);
+            m_allPrograms.add(temp);
+            m_somePrograms.add(temp);
+            Thread.sleep(SLEEP_TIME);
+        }
+        
         if (referee.equals(""))
             m_referee = null;
-        else
-        {
+        else {
             m_referee = new Program(referee, "Referee", "R", verbose);
             m_allPrograms.add(m_referee);
         }
         if (observer.equals(""))
             m_observer = null;
-        else
-        {
+        else {
             m_observer = new Program(observer, "Observer", "O", verbose);
             m_allPrograms.add(m_observer);
         }
         for (Program program : m_allPrograms)
             program.setLabel(m_allPrograms);
-        m_weights = weights;		
+        
+        m_weights = new double[numAgents];
+        StringTokenizer st_weights = new StringTokenizer(weightsList,"|");
+        for(int a = 0; a < numAgents; a++)
+        	m_weights[a] = new Double(st_weights.nextToken());
         m_size = size;
         m_komi = komi;
         m_alternate = alternate;
@@ -174,18 +171,16 @@ public class TwoGtp
         initGame(size);
         generator = new Random();
         
-    	fstream = new FileWriter[4];
-    	expertLog = new BufferedWriter[4];
+    	fstream = new FileWriter[numAgents];
+    	expertLog = new BufferedWriter[numAgents];
     	
-    	if (groupColor.equals("black"))
-    	{
+    	if (groupColor.equals("black")) {
     		myColor = BLACK;
     		myColorShort = "B";
     		oponentColor = WHITE;
     		oponentColorShort = "W";
     	}
-    	else
-    	{
+    	else {
     		myColor = WHITE;
     		myColorShort = "W";
     		oponentColor = BLACK;
@@ -195,15 +190,12 @@ public class TwoGtp
 
     public void autoPlay() throws Exception
     {
-        try
-        {
+        try {
             System.in.close();
             StringBuilder response = new StringBuilder(256);
             // Check if we can still play game (still have games left)
-            while (m_gameIndex < m_initialGame + m_numberGames)
-            {
-                try
-                {
+            while (m_gameIndex < m_initialGame + m_numberGames) {
+                try {
                     newGame(m_size);
                     while (! gameOver())
                     {
@@ -211,8 +203,7 @@ public class TwoGtp
                         sendGenmove(getToMove(), response);
                     }
                 }
-                catch (GtpError e)
-                {
+                catch (GtpError e) {
                     //handleEndOfGame(true, e.getMessage());
                 	if (m_black.isProgramDead())
                         throw new ErrorMessage("Black program died");
@@ -220,26 +211,13 @@ public class TwoGtp
                         throw new ErrorMessage("White program died");
                     if (m_alice.isProgramDead())
                         throw new ErrorMessage("Can't see Alice anymore");
-                    if (m_albert.isProgramDead())
-                        throw new ErrorMessage("Can't see Albert anymore");
-                    if (m_john.isProgramDead())
-                    {
-                    	FileWriter warningFile = new FileWriter(path + "warning");
-                    	BufferedWriter warning = new BufferedWriter(warningFile);
-                    	
-                    	warning.write("Can't see John anymore");                    	
-                    	
-                    	warning.close();
-                    	
-                        throw new ErrorMessage("Can't see John anymore");
-                    }
-                    if (m_francesco.isProgramDead())
-                        throw new ErrorMessage("Can't see Francesco anymore");
+                    for(int a = 0; a < m_allPrograms.size(); a++)
+	                    if (m_allPrograms.get(a).isProgramDead())
+	                        throw new ErrorMessage("ERROR: The program " + (m_allPrograms.get(a).getLabel()) + " has died!");
                     
                     // Well, one of the experts died... But let's go back to work!..
                     // ** Does not seem to work... Everything still stops if some expert die
-                    while (! gameOver())
-                    {
+                    while (! gameOver()) {
                         response.setLength(0);
                         sendGenmove(getToMove(), response);
                     }
@@ -250,25 +228,12 @@ public class TwoGtp
                     throw new ErrorMessage("White program died");
                 if (m_alice.isProgramDead())
                     throw new ErrorMessage("Can't see Alice anymore");
-                if (m_albert.isProgramDead())
-                    throw new ErrorMessage("Can't see Albert anymore");
-                if (m_john.isProgramDead())
-                {
-                	FileWriter warningFile = new FileWriter(path + "warning");
-                	BufferedWriter warning = new BufferedWriter(warningFile);
-                	
-                	warning.write("Can't see John anymore");                    	
-                	
-                	warning.close();
-                	
-                    throw new ErrorMessage("Can't see John anymore");
-                }
-                if (m_francesco.isProgramDead())
-                    throw new ErrorMessage("Can't see Francesco anymore");
+                for(int a = 0; a < m_allPrograms.size(); a++)
+                    if (m_allPrograms.get(a).isProgramDead())
+                        throw new ErrorMessage("ERROR: The program " + (m_allPrograms.get(a).getLabel()) + " has died!");
             }
         }
-        finally
-        {
+        finally {
             close();
         }
     }
@@ -308,8 +273,7 @@ public class TwoGtp
             twogtpReferee(cmd);
         else if (command.equals("gogui-twogtp-observer"))
             twogtpObserver(cmd);
-        else if (command.equals("quit"))
-        {
+        else if (command.equals("quit")) {
             close();
             setQuit();
         }
@@ -360,9 +324,10 @@ public class TwoGtp
             boolean isExtCommandBlack = m_black.isSupported(command);
             boolean isExtCommandWhite = m_white.isSupported(command);
             boolean isExtCommandAlice = m_alice.isSupported(command);
-            boolean isExtCommandAlbert = m_albert.isSupported(command);
-            boolean isExtCommandJohn = m_john.isSupported(command);
-            boolean isExtCommandFrancesco = m_francesco.isSupported(command);            
+            boolean isExtCommandAny = false;
+            for(int a = 0; a < m_allPrograms.size(); a++)
+                if (m_allPrograms.get(a).isSupported(command))
+                    isExtCommandAny = true;            
             boolean isExtCommandReferee = false;
             if (m_referee != null)
                 isExtCommandReferee = m_referee.isSupported(command);
@@ -371,52 +336,36 @@ public class TwoGtp
                 isExtCommandObserver = m_observer.isSupported(command);
             if (isExtCommandBlack && ! isExtCommandObserver
                 && ! isExtCommandWhite && ! isExtCommandAlice
-                && ! isExtCommandAlbert   && !isExtCommandJohn
-                && ! isExtCommandFrancesco && ! isExtCommandReferee)
+                && !isExtCommandAny && ! isExtCommandReferee)
                 forward(m_black, cmd);
             if (isExtCommandWhite && ! isExtCommandObserver
                 && ! isExtCommandBlack && ! isExtCommandAlice
-                && ! isExtCommandAlbert   && !isExtCommandJohn
-                && ! isExtCommandFrancesco && ! isExtCommandReferee)
+                && !isExtCommandAny && ! isExtCommandReferee)
                 forward(m_white, cmd);
             if (isExtCommandAlice && ! isExtCommandObserver
                 && ! isExtCommandBlack && ! isExtCommandWhite
-                && ! isExtCommandAlbert && ! isExtCommandJohn
-                && isExtCommandFrancesco && ! isExtCommandReferee)
+                && !isExtCommandAny && ! isExtCommandReferee)
                 forward(m_alice, cmd);
-            if (isExtCommandAlbert && ! isExtCommandObserver
+            if (isExtCommandAny && ! isExtCommandObserver
                 && ! isExtCommandBlack && ! isExtCommandAlice
-                && ! isExtCommandJohn && ! isExtCommandFrancesco
                 && ! isExtCommandWhite && ! isExtCommandReferee)
-                forward(m_albert, cmd);
-            if (isExtCommandJohn && ! isExtCommandObserver
-                    && ! isExtCommandBlack && ! isExtCommandAlice
-                    && ! isExtCommandAlbert && ! isExtCommandFrancesco
-                    && ! isExtCommandWhite && ! isExtCommandReferee)
-            	forward(m_john, cmd);
-            if (isExtCommandFrancesco && ! isExtCommandObserver
-                    && ! isExtCommandBlack && ! isExtCommandAlice
-                    && ! isExtCommandJohn && ! isExtCommandAlbert
-                    && ! isExtCommandWhite && ! isExtCommandReferee)
-                 forward(m_francesco, cmd);
+            {
+            	for(int a = 0; a < m_allPrograms.size(); a++)
+                    if (m_allPrograms.get(a).isSupported(command))
+                    	forward(m_allPrograms.get(a), cmd);
+            }
             if (isExtCommandReferee && ! isExtCommandObserver
                 && ! isExtCommandBlack && ! isExtCommandWhite
-                && ! isExtCommandAlice && ! isExtCommandAlbert
-                && ! isExtCommandJohn && ! isExtCommandFrancesco)
+                && ! isExtCommandAlice && !isExtCommandAny)
                 forward(m_referee, cmd);
             if (isExtCommandObserver && ! isExtCommandReferee
                 && ! isExtCommandBlack && ! isExtCommandWhite
-                && ! isExtCommandAlice && ! isExtCommandAlbert
-                && ! isExtCommandJohn && ! isExtCommandFrancesco)
+                && ! isExtCommandAlice && !isExtCommandAny)
                 forward(m_observer, cmd);
-            if (! isExtCommandReferee
-                && ! isExtCommandBlack
-                && ! isExtCommandObserver
-                && ! isExtCommandWhite
-                && ! isExtCommandAlice
-                && ! isExtCommandAlbert
-                && ! isExtCommandJohn
-                && ! isExtCommandFrancesco)
+            
+            if (! isExtCommandReferee && ! isExtCommandBlack
+                && ! isExtCommandObserver && ! isExtCommandWhite
+                && ! isExtCommandAlice && !isExtCommandAny)
                 throw new GtpError("unknown command");
             throw new GtpError("use gogui-twogtp-black/white/referee/observer");
         }
@@ -451,14 +400,15 @@ public class TwoGtp
 
     private int m_gameIndex;
     
+    private int m_numAgents; // DOUG CHEN: ADDED
+    
     private final int m_initialGame;
 
     private final int m_numberGames;
 
     private final int m_size;
 
-    /** Fixed komi. */
-    private final Komi m_komi;
+    private final Komi m_komi; /** Fixed komi. */
 
     private Game m_game;
 
@@ -472,12 +422,6 @@ public class TwoGtp
     
     private final Program m_alice;
     
-    private final Program m_albert;
-    
-    private final Program m_john;
-    
-    private final Program m_francesco;
-    
     private final Program m_referee;
 
     private final Program m_observer;
@@ -485,6 +429,9 @@ public class TwoGtp
     private double [] m_weights;
     
     private final ArrayList<Program> m_allPrograms;
+    
+    //DOUG CHEN: ADDED
+    private final ArrayList<Program> m_somePrograms;
 
     private final BlackWhiteSet<Double> m_realTime =
         new BlackWhiteSet<Double>(0., 0.);
@@ -534,16 +481,13 @@ public class TwoGtp
 
     private void cmdGenmove(GtpCommand cmd) throws GtpError
     {
-        try
-        {
+        try {
             sendGenmove(cmd.getColorArg(), cmd.getResponse());
         }
-        catch (ErrorMessage e)
-        {
+        catch (ErrorMessage e) {
             throw new GtpError(e.getMessage());
         }
-        catch (GtpResponseFormatError e)
-        {
+        catch (GtpResponseFormatError e) {
         	throw new GtpError(e.getMessage());
         }
     }
@@ -589,8 +533,7 @@ public class TwoGtp
         if (file.exists())
         {
             m_table = new Table();
-            try
-            {
+            try {
                 m_table.read(getResultFile());
                 int lastRowIndex = m_table.getNumberRows() - 1;
                 m_gameIndex =
@@ -598,8 +541,7 @@ public class TwoGtp
                 if (m_gameIndex < 0)
                     throw new ErrorMessage("Invalid file format: " + file);
             }
-            catch (NumberFormatException e)
-            {
+            catch (NumberFormatException e) {
                 throw new ErrorMessage("Invalid file format: " + file);
             }
             catch (FileNotFoundException e)
@@ -696,8 +638,7 @@ public class TwoGtp
         StringBuilder buffer = new StringBuilder();
         String nameBlack = m_black.getLabel();
         String nameWhite = m_white.getLabel();
-        if (isAlternated())
-        {
+        if (isAlternated()) {
             String tmpName = nameBlack;
             nameBlack = nameWhite;
             nameWhite = tmpName;
@@ -706,8 +647,7 @@ public class TwoGtp
         buffer.append(" vs ");
         buffer.append(nameBlack);
         buffer.append(" (B)");
-        if (! m_filePrefix.equals(""))
-        {
+        if (! m_filePrefix.equals("")) {
             buffer.append(" (");
             buffer.append(m_gameIndex + 1);
             buffer.append(')');
@@ -718,21 +658,18 @@ public class TwoGtp
     private void handleEndOfGame(boolean error, String errorMessage)
         throws ErrorMessage
     {
-        try
-        {
+        try {
             String resultBlack;
             String resultWhite;
             String resultReferee;
-            if (m_resigned)
-            {
+            if (m_resigned) {
                 String result = (m_resignColor == BLACK ? "W" : "B");
                 result = result + "+R";
                 resultBlack = result;
                 resultWhite = result;
                 resultReferee = result;
             }
-            else
-            {
+            else {
                 resultBlack = m_black.getResult();
                 resultWhite = m_white.getResult();
                 resultReferee = "?";
@@ -743,8 +680,7 @@ public class TwoGtp
             double cpuTimeWhite = m_white.getAndClearCpuTime();
             double realTimeBlack = m_realTime.get(BLACK);
             double realTimeWhite = m_realTime.get(WHITE);
-            if (isAlternated())
-            {
+            if (isAlternated()) {
                 resultBlack = inverseResult(resultBlack);
                 resultWhite = inverseResult(resultWhite);
                 resultReferee = inverseResult(resultReferee);
@@ -757,18 +693,19 @@ public class TwoGtp
                 Compare.checkDuplicate(getBoard(), moves, m_games,
                                        m_alternate, isAlternated());
             // If a program is dead we wait for a few seconds, because it
-            // could be because the TwoGtp process was killed and we don't
+            // could be that the TwoGtp process was killed and we don't
             // want to write a result in this case.
+            boolean programsDead = false;
+            for(Program p : m_allPrograms)
+            	if(p.isProgramDead())
+            		programsDead = true;
             if (m_black.isProgramDead() || m_white.isProgramDead()
-            		|| m_alice.isProgramDead() || m_albert.isProgramDead()
-            		|| m_john.isProgramDead() || m_francesco.isProgramDead())
+            		|| m_alice.isProgramDead() || programsDead)
             {
-                try
-                {
-                    Thread.sleep(3000);
+                try {
+                    Thread.sleep(SLEEP_TIME);
                 }
-                catch (InterruptedException e)
-                {
+                catch (InterruptedException e) {
                     assert false;
                 }
             }
@@ -781,8 +718,7 @@ public class TwoGtp
             ++m_gameIndex;
             m_games.add(moves);
         }
-        catch (FileNotFoundException e)
-        {
+        catch (FileNotFoundException e) {
             System.err.println("Could not save game: " + e.getMessage());
         }
     }
@@ -871,43 +807,34 @@ public class TwoGtp
         m_black.getAndClearCpuTime();
         m_white.getAndClearCpuTime();
         m_alice.getAndClearCpuTime();
-        m_albert.getAndClearCpuTime();
-        m_john.getAndClearCpuTime();
-        m_francesco.getAndClearCpuTime();        
+        for(int i = 0; i < m_allPrograms.size(); i++)
+        	m_allPrograms.get(i).getAndClearCpuTime();       
         initGame(size);
         m_gameSaved = false;
         if (m_timeSettings != null)
-            sendIfSupported("time_settings",
-                            GtpUtil.getTimeSettingsCommand(m_timeSettings));
+            sendIfSupported("time_settings", GtpUtil.getTimeSettingsCommand(m_timeSettings));
         
-        try
-        {
+        try {
         	// Set up the file writers for each of the program's log files
-        	if (myColor == BLACK)
-        	{
+        	if (myColor == BLACK) {
+        		for(int a = 0; a < m_numAgents; a++)
+        			fstream[a] = new FileWriter(path + "agent-" + a + "-b-" + m_gameIndex + ".log");
+        		/*
         		fstream[0] = new FileWriter(path + "alice-b-" + m_gameIndex + ".log");
-        		fstream[1] = new FileWriter(path + "albert-b-" + m_gameIndex + ".log");
-        		fstream[2] = new FileWriter(path + "john-b-" + m_gameIndex + ".log");
-        		fstream[3] = new FileWriter(path + "francesco-b-" + m_gameIndex + ".log");
+        		*/
         	}
-        	else
-        	{
-        		fstream[0] = new FileWriter(path + "alice-w-" + m_gameIndex + ".log");
-        		fstream[1] = new FileWriter(path + "albert-w-" + m_gameIndex + ".log");
-        		fstream[2] = new FileWriter(path + "john-w-" + m_gameIndex + ".log");
-        		fstream[3] = new FileWriter(path + "francesco-w-" + m_gameIndex + ".log");
+        	else {
+        		for(int a = 0; a < m_numAgents; a++)
+        			fstream[a] = new FileWriter(path + "agent-" + a + "-w-" + m_gameIndex + ".log");
         	}
         }
-        catch (IOException e)
-        {
+        catch (IOException e) {
         	System.out.println("Error: Could not create the log files");
         	System.exit(0);
         }
     	
-    	for(int i = 0; i < 4; i++)
-    	{
+    	for(int i = 0; i < m_numAgents; i++)
 	    	expertLog[i] = new BufferedWriter(fstream[i]);	    
-    	}
     }
 
     private void readGames()
@@ -915,8 +842,7 @@ public class TwoGtp
         for (int n = m_initialGame; n < m_gameIndex; ++n)
         {
             File file = getFile(n);
-            if (! file.exists())
-            {
+            if (! file.exists()) {
                 System.err.println("Game " + file + " not found");
                 continue;
             }
@@ -930,13 +856,11 @@ public class TwoGtp
                 ConstNode root = reader.getTree().getRoot();
                 m_games.add(Compare.getPlacements(root));
             }
-            catch (SgfError e)
-            {
+            catch (SgfError e) {
                 System.err.println("Error reading " + file + ": " +
                                    e.getMessage());
             }
-            catch (Exception e)
-            {
+            catch (Exception e) {
                 System.err.println("Error reading " + file + ": " +
                                    e.getMessage());
             }
@@ -1054,8 +978,7 @@ public class TwoGtp
     
     private String lastOponentMovement = "";
     
-    private void undo(Program expert) // Special undo function for Pachi
-    		throws GtpError
+    private void undo(Program expert) throws GtpError // Special undo function for Pachi
     {
     	ConstGameTree tree = getTree();
     	ConstNode node = tree.getRootConst();
@@ -1066,7 +989,6 @@ public class TwoGtp
     	while (node.getNumberChildren() == 1)
     	{
     		move = node.getMove();
-
     		if (move != null)
     		{
     			//String point = getPoint(move.getPoint()); // What about pass?
@@ -1088,22 +1010,15 @@ public class TwoGtp
     	}
     	
     	if (!lastOponentMovement.equals("")) // For some reason, the last oponent movement seemed to be missing...
-    	{
     		expert.send("play " + oponentColorShort + " " + lastOponentMovement);
-    	}
     }
     
     private boolean zeroMap(float map[][], int beginX, int endX, int beginY, int endY)
     {
     	for(int i = beginX; i < endX; i++)
-    	{
     		for(int j = beginY; j < endY; j++)
-    		{
     			if (map[i][j] != 0 && map[i][j] != OCCUPIED)
     				return false;
-    		}    		
-    	}
-    	
     	return true;
     }
     
@@ -1142,44 +1057,74 @@ public class TwoGtp
         // SORIANO: MODIFICATION POINT
         String responseGenmove = "-1";
         
-		int[][] vote = new int[4][2];
-		int[][] votedMovs = new int[4][2];
+		int[][] vote = new int[m_numAgents][2];
+		int[][] votedMovs = new int[m_numAgents][2];
 		int numVotedMovs = 0;
-		double [] numVotes = new double[4];
-		String[] names = {"Alice", "Albert", "John", "Francesco"};
+		double [] numVotes = new double[m_numAgents];
+		// String[] names = {"Alice", "Albert", "John", "Francesco"};
 		int playX = -1;
 		int playY = -1;
 		GoPoint bestMove;		
-		boolean ignoreExpert[] = {false, false, false, false};
+		boolean ignoreExpert[] = new boolean[m_numAgents];
+		for(int a = 0; a < ignoreExpert.length; a++)
+			ignoreExpert[a] = false;
 		int votesResign = 0;
 		int votesPass = 0;
 		boolean pass = false;
 		boolean resign = false;
 		int numExpertsAlive = 0;
 		boolean openingBook = false;		
-		int nExperts = 4;
+		int nExperts = m_numAgents;
 		boolean foundVote = false;
 		//float[] moveValue = {-1, -1, -1, -1};
 		
 		int maxVotesPos = 0;
 		double maxNumVotes = -1;
 		int finalMaxVote = -1;
-		int [] maxVotes = {-1, -1, -1, -1};
+		int [] maxVotes = new int[m_numAgents];
+		for(int a = 0; a < maxVotes.length; a++)
+			maxVotes[a] = -1;
 		
 		moveNumber++;
-		
-		/*if (moveNumber >= 54) // Test for an arbitrary weight towards the end of the game
-		{
-			System.out.println("Playing with different weights now!..");
-			m_weights[0] = 1.2;
-			m_weights[1] = 0.5;
-			m_weights[2] = 1.2;
-			m_weights[3] = 0.5;
-		}*/
 		
 		if (color == myColor)
 		{			
 			systemMoveNumber++;
+			
+			// DOUG CHEN: for-loop
+			for(int a = 0; a < m_numAgents; a++)
+			{
+				Program theProgram = m_somePrograms.get(a);
+				if (m_weights[a] != 0 || !theProgram.isProgramDead()) {
+					numExpertsAlive++;
+					String testFirstMove = theProgram.sendCommandGenmove(color);
+					if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass")) {
+						responseGenmove = testFirstMove;
+						System.out.println(testFirstMove);
+						ignoreExpert[a] = true;
+						
+						if (testFirstMove.equalsIgnoreCase("resign")) // ** I guess I can't undo a resign...
+							votesResign++;
+						if (testFirstMove.equalsIgnoreCase("pass")) {
+							votesPass++;
+							theProgram.send("undo");
+						}
+					}
+					else {
+						// Pachi undo quirk
+						if (theProgram.m_command.equals("/home/soriano/pesquisa/desenvolvimento/go/pachi/pachi"))
+							undo(theProgram);
+						else
+							theProgram.send("undo");
+						GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
+						vote[a][0] = tmp.getX();
+						vote[a][1] = tmp.getY();
+					}
+				}
+				else
+					ignoreExpert[a] = true;
+			}
+			// end for-loop
 			
 			// The repetition looks terrible...
 			if (m_weights[0] != 0)
@@ -1222,18 +1167,6 @@ public class TwoGtp
 						vote[0][0] = tmp.getX();
 						vote[0][1] = tmp.getY();
 						
-						// Old version for opening book test
-						/*if (zeroMap(map[0], 0, 9, 0, 9)) // Is Alice playing opening book?..
-						{
-							openingBook = true;
-							
-							responseGenmove = testFirstMove;
-							
-							System.out.println("Playing opening book move " + responseGenmove);
-							
-							program.send("play " + myColorShort + " " + responseGenmove);	
-						}*/
-						
 						// New version for opening book test
 						if (((myColor == BLACK && moveNumber <= 14) ||
 							(myColor == WHITE && moveNumber <=13)) && m_useOpeningDB) // Is Alice playing opening book?.. // Should be 14 for black?.. And 13 for white?..
@@ -1270,184 +1203,34 @@ public class TwoGtp
 			}			
 			
 			if (!openingBook) // I will only play the other experts if it is not an opening book move...
-			{
-				if (m_weights[1] != 0)
-				{
-					if (!m_albert.isProgramDead())
-					{
-						numExpertsAlive++;
-						
-						String testFirstMove = m_albert.sendCommandGenmove(color);
-						
-						if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass"))
-						{
-							responseGenmove = testFirstMove;
-							
-							System.out.println(testFirstMove);
-							
-							//m_albert.send("showboard"); // For debug
-							
-							ignoreExpert[1] = true;
-							
-							if (testFirstMove.equalsIgnoreCase("resign")) // ** I guess I can't undo a resign...
-								votesResign++;
-							if (testFirstMove.equalsIgnoreCase("pass"))
-							{
-								votesPass++;
-								m_albert.send("undo");
-							}
-						}
-						else
-						{
-							//map[1] = buildQuickMap(m_albert, beginX, endX, beginY, endY, color);
-							//hasMap[1] = true;
-							//undo(m_albert);
-							//moveValue[1] = getValue(m_albert,color);
-							if (m_albert.m_command.equals("/home/soriano/pesquisa/desenvolvimento/go/pachi/pachi"))
-								undo(m_albert);
-							else
-								m_albert.send("undo");
-							//map[1] = buildMap(m_albert, color);
-							GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
-							vote[1][0] = tmp.getX();
-							vote[1][1] = tmp.getY();
-						}
-					}
-					else
-						ignoreExpert[1] = true;
-				}
-				else
-					ignoreExpert[1] = true;
-				
-				if (m_weights[2] != 0)
-				{
-					if (!m_john.isProgramDead())
-					{
-						numExpertsAlive++;
-						
-						String testFirstMove = m_john.sendCommandGenmove(color);
-						
-						if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass"))
-						{
-							responseGenmove = testFirstMove;
-							
-							System.out.println(testFirstMove);
-							
-							//m_john.send("showboard"); // For debug // Pachi can't showboard
-							
-							ignoreExpert[2] = true;
-							
-							if (testFirstMove.equalsIgnoreCase("resign"))
-								votesResign++;
-							if (testFirstMove.equalsIgnoreCase("pass")) // ** I guess I can't undo a resign...
-							{
-								votesPass++;
-								m_john.send("undo");
-							}
-						}
-						else
-						{
-							//map[2] = buildQuickMap(m_john, beginX, endX, beginY, endY, color);
-							//hasMap[2] = true;
-							//moveValue[2] = getValue(m_john,color);
-							if (m_john.m_command.equals("/home/soriano/pesquisa/desenvolvimento/go/pachi/pachi"))								
-								undo(m_john);
-							else
-								m_john.send("undo");
-							//map[2] = buildMap(m_john, color);
-							GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
-							vote[2][0] = tmp.getX();
-							vote[2][1] = tmp.getY();
-						}
-					}
-					else
-						ignoreExpert[2] = true;
-				}
-				else
-					ignoreExpert[2] = true;
-				
-				if (m_weights[3] != 0)
-				{
-					if (!m_francesco.isProgramDead())
-					{
-						numExpertsAlive++;
-						
-						String testFirstMove = m_francesco.sendCommandGenmove(color);
-						
-						if (testFirstMove.equalsIgnoreCase("resign") || testFirstMove.equalsIgnoreCase("pass"))
-						{
-							responseGenmove = testFirstMove;
-							
-							System.out.println(testFirstMove);
-							
-							m_francesco.send("showboard"); // For debug
-							
-							ignoreExpert[3] = true;
-							
-							if (testFirstMove.equalsIgnoreCase("resign")) // ** I guess I can't undo a resign...
-								votesResign++;
-							if (testFirstMove.equalsIgnoreCase("pass"))
-							{
-								votesPass++;
-								m_francesco.send("undo");
-							}
-						}
-						else
-						{
-							//map[3] = buildQuickMap(m_francesco, beginX, endX, beginY, endY, color);
-							//hasMap[3] = true;
-							//moveValue[3] = getValue(m_francesco,color);
-							if (m_francesco.m_command.equals("/home/soriano/pesquisa/desenvolvimento/go/pachi/pachi"))
-								undo(m_francesco);
-							else
-								m_francesco.send("undo");
-							//map[3] = buildMap(m_francesco, color);
-							
-							GoPoint tmp = GtpUtil.parsePoint(testFirstMove, getBoard().getSize());					
-							vote[3][0] = tmp.getX();
-							vote[3][1] = tmp.getY();
-						}
-					}
-					else
-						ignoreExpert[3] = true;
-				}
-				else
-					ignoreExpert[3] = true;
-					
-			
-			//recursiveVotes(map);			
-							
-				
+			{				
 		    	for(int i = 0; i < nExperts; i++)
 				{
-		    		if (ignoreExpert[i])
+		    		if (!ignoreExpert[i])
 		    		{
-						System.out.println("Warning! I am ignoring " + names[i]);
-		    			continue;
-		    		}
-		    			    								
-					System.out.println(names[i] + " votes: " + GoPoint.get(vote[i][0], vote[i][1]).toString());
-					
-					foundVote = false;
-					for(int j = 0; j < numVotedMovs; j++)
-					{
-						if (votedMovs[j][0] == vote[i][0] && votedMovs[j][1] == vote[i][1])
+						foundVote = false;
+						for(int j = 0; j < numVotedMovs; j++)
 						{
-							foundVote = true;
-							numVotes[j] += m_weights[i];
+							if (votedMovs[j][0] == vote[i][0] && votedMovs[j][1] == vote[i][1])
+							{
+								foundVote = true;
+								numVotes[j] += m_weights[i];
+							}
 						}
-					}
-					if (!foundVote)
-					{
-						votedMovs[numVotedMovs][0] = vote[i][0];
-						votedMovs[numVotedMovs][1] = vote[i][1];
-						numVotes[numVotedMovs] = m_weights[i];
-								
-						numVotedMovs++;						
-					}
+						if (!foundVote)
+						{
+							votedMovs[numVotedMovs][0] = vote[i][0];
+							votedMovs[numVotedMovs][1] = vote[i][1];
+							numVotes[numVotedMovs] = m_weights[i];
+									
+							numVotedMovs++;						
+						}
+		    		}
 				}
 						
-				for(int i = 0; i < 4; i++)
+		    	if ((votesPass + votesResign) <= numExpertsAlive/2)
+		    	{
+				for(int i = 0; i < m_numAgents; i++)
 				{
 					System.out.println("Move: (" + votedMovs[i][0] + "," + votedMovs[i][1] + ") # of votes: " + numVotes[i]);
 					
@@ -1479,25 +1262,22 @@ public class TwoGtp
 		        	fw_votes.write("");
 		        	fw_votes.close();
 		        	fw_votes = new FileWriter("votes_text_file.txt");
-		        	
-		        	try
-		        	{
+		        	//fw_votes.write("4\n");
+		        	fw_votes.write(Integer.toString(m_numAgents) + "\n");
+		        	try {
 		        		fw_acceptedOpinions = new FileWriter("acceptedOpinions.txt");
 		        	}
-		        	catch (IOException e)
-		        	{
+		        	catch (IOException e) {
 		        		System.out.println("Error: Could not create the opinions files");
 		        		System.exit(0);
 		        	}
 		        	
 		        	acceptedOpinions = new BufferedWriter(fw_acceptedOpinions);
 		        	
-		        	try
-		        	{
+		        	try {
 		        		fw_freqAgreed = new FileWriter("freqAgreed.txt");
 		        	}
-		        	catch (IOException e)
-		        	{
+		        	catch (IOException e) {
 		        		System.out.println("Error: Could not create the freqAgreed files");
 		        		System.exit(0);
 		        	}
@@ -1505,11 +1285,9 @@ public class TwoGtp
 		        	freqAgreed = new BufferedWriter(fw_freqAgreed);
 		        	
 		        	int numAgreedTmp = 0;
-		        	
 					for(int i = 0; i < nExperts; i++)
 					{
-						try
-						{
+						try {
 							if (ignoreExpert[i])
 							{
 								expertLog[i].write(moveNumber + ", 4, -1 \n");
@@ -1519,11 +1297,8 @@ public class TwoGtp
 							{
 								if (vote[i][0] == playX && vote[i][1] == playY)
 								{
-									//expertLog[i].write(moveNumber + ", 1, " + GoPoint.get(vote[i][0], vote[i][1]).toString() + ", " + moveValue[i] + "\n");
 									expertLog[i].write("HELLO " + moveNumber + ", 1, " + GoPoint.get(vote[i][0], vote[i][1]).toString() + "\n");
-									
 									numAccepted[i]++;
-									
 									numAgreedTmp++;
 								}
 								else
@@ -1532,20 +1307,18 @@ public class TwoGtp
 									expertLog[i].write("HELLO2 " + moveNumber + ", 0, " + GoPoint.get(vote[i][0], vote[i][1]).toString() + "\n");
 								}
 								fw_votes.write("Program "+i+": "+vote[i][0]+" "+vote[i][1]+"\n");
-								
 								Float tmp = (float)(numAccepted[i])/(float)(systemMoveNumber);
 								acceptedOpinions.write(tmp.toString()+"\n");
 							}
 						}
-						catch(IOException e)
-						{
+						catch(IOException e) {
 							System.out.println("Error writing log");
 						}						
 					}
 					
 					numAgreed[numAgreedTmp-1]++;
 					
-					for(int i = 0; i < 4; i++)
+					for(int i = 0; i < m_numAgents; i++)
 					{
 						Float tmp = (float)numAgreed[i]/(float)systemMoveNumber;
 						freqAgreed.write(tmp.toString()+"\n");
@@ -1557,9 +1330,9 @@ public class TwoGtp
 				} catch(IOException e) {
 					System.out.println("Problem with votes_text_file.txt");
 				}
+		    	}
 				// Doug Chen - ADDED:
 				ConstBoard theBoard = getBoard();
-				
 				
 				String showboard = program.send("showboard");
 				System.out.println(showboard);
@@ -1592,33 +1365,28 @@ public class TwoGtp
 			    	else
 			    		responseGenmove = "resign";
 				}
-			}			
+			}
 		}
-		else
-		{
+		else {
 			responseGenmove = program.sendCommandGenmove(color);
 			lastOponentMovement = responseGenmove;
 		}
 		
 	    double time = (System.currentTimeMillis() - timeMillis) / 1000.;
 	    m_realTime.set(color, m_realTime.get(color) + time);
-	    if (responseGenmove.equalsIgnoreCase("resign"))
-	    {
+	    if (responseGenmove.equalsIgnoreCase("resign")) {
 	        response.append("resign");
 	        m_resigned = true;
 	        m_resignColor = color;
 	    }	    
-	    else
-	    {
+	    else {
 	        ConstBoard board = getBoard();
 	        GoPoint point = null;
 	        	        
-	        try
-	        {
+	        try {
 	            point = GtpUtil.parsePoint(responseGenmove, board.getSize());
 	        }
-	        catch (GtpResponseFormatError e)
-	        {
+	        catch (GtpResponseFormatError e) {
 	            throw new GtpError(program.getLabel()
 	                               + " played invalid move: "
 	                               + responseGenmove);
@@ -1639,12 +1407,10 @@ public class TwoGtp
 	        
 	        for(int i = 0; i < nExperts; i++)
 	        {
-	        	try
-	        	{
+	        	try {
 	        		expertLog[i].close();
 	        	}
-	        	catch (IOException e)
-	        	{
+	        	catch (IOException e) {
 	        		System.out.println("Error closing log file");
 	        		System.exit(0);
 	        	}

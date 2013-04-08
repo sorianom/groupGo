@@ -44,14 +44,9 @@ public final class Main
                 "version",
                 "white:",
                 "xml",
-                "alice:",
-                "albert:",
-                "john:",
-                "francesco:",
-                "aliceWeight:",
-                "albertWeight:",
-                "johnWeight:",
-                "francescoWeight:",
+                "numAgents:",
+                "agentsList:",
+                "weightsList:",
                 "groupColor:",
                 "path:",
                 "openingDB"
@@ -110,14 +105,15 @@ public final class Main
             boolean openingDB = opt.contains("openingDB");
             String black = opt.get("black", "");
             String white = opt.get("white", "");
+            /*
             String alice = opt.get("alice", "");
             String albert = opt.get("albert", "");
             String john = opt.get("john", "");
             String francesco = opt.get("francesco", "");
-            double aliceWeight = opt.getDouble("aliceWeight",1);
-            double albertWeight = opt.getDouble("albertWeight",1);
-            double johnWeight = opt.getDouble("johnWeight",1);
-            double francescoWeight = opt.getDouble("francescoWeight",1);
+            */
+            int numAgents = opt.getInteger("numAgents", 0);
+            String agentsList = opt.get("agentsList", "");
+            String weightsList = opt.get("weightsList", "");
             String referee = opt.get("referee", "");
             String observer = opt.get("observer", "");
             String groupColor = opt.get("groupColor", "");
@@ -142,11 +138,16 @@ public final class Main
             if (opt.contains("openings"))
                 openings = new Openings(new File(opt.get("openings")));
             boolean useXml = opt.contains("xml");
-            double [] weights = {aliceWeight, albertWeight, johnWeight, francescoWeight};
+            // double [] weights = {aliceWeight, albertWeight, johnWeight, francescoWeight};
+            /*
             TwoGtp twoGtp
                 = new TwoGtp(iteration, path, black, white, alice, albert, john, francesco, weights, groupColor, referee, observer, size, komi,
                              initialGame, games, alternate, sgfFile, force, verbose,
                              openings, timeSettings, useXml, openingDB);
+             */
+            TwoGtp twoGtp
+	            = new TwoGtp(iteration, path, black, white, numAgents, agentsList, weightsList, groupColor, referee, observer, size, komi,
+	            		initialGame, games, alternate, sgfFile, force, verbose, openings, timeSettings, useXml, openingDB);
             twoGtp.setMaxMoves(maxMoves);
             if (auto)
             {

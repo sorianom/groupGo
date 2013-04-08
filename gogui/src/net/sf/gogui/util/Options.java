@@ -5,13 +5,13 @@ package net.sf.gogui.util;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.IOException;
 import java.io.Reader;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.ArrayList;
 
 /** Parser for command line options.
     Options begin with a single '-' character.
@@ -315,6 +315,7 @@ public class Options
     {
         boolean stopParse = false;
         int n = 0;
+        int numAgents = -1;
         while (n < args.length)
         {
             String s = args[n];
@@ -330,15 +331,38 @@ public class Options
                 if (needsValue(spec))
                 {
                     if (n >= args.length)
-                        throw new ErrorMessage("Option " + s
-                                               + " needs value");
-                    String value = args[n];
-                    ++n;
-                    m_map.put(spec, value);
+                        throw new ErrorMessage("Option " + s + " needs value");
+                    if(spec.equals("numAgents"))
+                    {
+                    	numAgents = new Integer(args[n]);
+                    	++n;
+                    	m_map.put(spec, "" + numAgents);
+                    }
+                    else if(spec.equals("agentsList"))
+                	{
+                    	if(n < 0)
+                    		throw new ErrorMessage("ERROR: Set number of agents before setting actual agents!");
+                    	String fileNames = args[n];
+                		++n;
+                    	m_map.put(spec, fileNames);
+                	}
+                    else if(spec.equals("weightsList")) // -numAgents 4 -agentsList \"gnugo --mode gtp --level 7\" -weightsList 0.5 0.8 1.2 1.4
+                	{
+                    	if(n < 0)
+                    		throw new ErrorMessage("ERROR: Set number of agents before setting actual weights!");
+                    	String weights = args[n];
+                		++n;
+                    	m_map.put(spec, weights);
+                	}
+                    else
+                    {
+	                    String value = args[n];
+	                    ++n;
+	                    m_map.put(spec, value);
+                    }
                 }
                 else
                     m_map.put(spec, "1");
-
             }
             else
                 m_args.add(s);

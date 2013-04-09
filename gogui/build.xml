@@ -177,6 +177,13 @@ Comment out the exec svnversion for releases.
  ${looks.zipfile}
  ${quaqua.nestedzipfile}
  lib/*.jar
+ mac/packaging/GoGui.icns
+ mac/packaging/Info.plist
+ mac/packaging/Info.plist.in
+ mac/packaging/PkgInfo
+ mac/src/net/sf/gogui/specialmac/RegisterSpecialMacHandler.java
+ mac/src/net/sf/gogui/specialmac/RegisterSpecialMacHandler.class
+ mac/src/net/sf/gogui/specialmac/Listener.class
  sgf/openings/9x9/README
  sgf/openings/9x9/*.sgf
  sgf/openings/19x19/README
@@ -565,6 +572,52 @@ ${quaqua.nestedzipfile}
 </exec>
 </target>
 
+<target name="gogui.app" depends="specialmac,all"
+ description="Make Mac application bundle">
+<property name="appdir" value="build/GoGui.app"/>
+<mkdir dir="${appdir}"/>
+<mkdir dir="${appdir}/Contents"/>
+<mkdir dir="${appdir}/Contents/bin"/>
+<mkdir dir="${appdir}/Contents/MacOS"/>
+<mkdir dir="${appdir}/Contents/Resources"/>
+<mkdir dir="${appdir}/Contents/Resources/Java"/>
+<copy file="/System/Library/Frameworks/JavaVM.framework/Versions/Current/Resources/MacOS/JavaApplicationStub"
+  todir="${appdir}/Contents/MacOS"/>
+<exec executable="chmod">
+<arg line="755 ${appdir}/Contents/MacOS/JavaApplicationStub"/>
+</exec>
+<copy todir="${appdir}/Contents" overwrite="true">
+<fileset dir="mac/packaging" includes="Info.plist PkgInfo"/>
+</copy>
+<copy todir="${appdir}/Contents/Resources" overwrite="true">
+<fileset dir="mac/packaging" includes="GoGui.icns"/>
+</copy>
+<copy todir="${appdir}/Contents/Resources/GoGui Help" overwrite="true">
+<fileset dir="doc/manual/html" includes="*.html *.png"/>
+</copy>
+<replace file="${appdir}/Contents/Resources/GoGui Help/index.html"
+ token="&lt;head&gt;"
+ value="&lt;head&gt;&lt;meta name=&quot;AppleTitle&quot; content=&quot;GoGui Help&quot;&gt;"/>
+<copy todir="${appdir}/Contents/Resources/Java" overwrite="true">
+<fileset dir="lib" includes="*.jar" excludes="looks-*.jar"/>
+</copy>
+<copy todir="${appdir}/Contents/bin" overwrite="true">
+<fileset dir="bin" includes="${scripts}"/>
+</copy>
+<replace dir="${appdir}/Contents/bin" includes="${scripts}"
+ token="/../lib" value="/../Resources/Java"/>
+<chmod dir="${appdir}/Contents/bin" includes="${scripts}" perm="755"/>
+<exec executable="/Developer/Tools/SetFile">
+<arg line="-a B ${appdir}"/>
+</exec>
+</target>
+
+<target name="gogui.dmg" depends="gogui.app"
+ description="Make Mac compressed disk image">
+<exec executable="hdiutil">
+<arg line="create -fs HFS+ -format UDZO -volname GoGui-${version} -srcfolder build/GoGui.app build/GoGui-${version}.dmg"/>
+</exec>
+</target>
 
 <target name="gogui.jar" depends="compile,extract-looks,extract-quaqua">
 <mkdir dir="lib"/>
@@ -599,6 +652,9 @@ ${quaqua.nestedzipfile}
  net/sf/gogui/util/*.class
  net/sf/gogui/version/Version.class
  net/sf/gogui/xml/*.class
+"/>
+<fileset dir="mac/src" includes="
+ net/sf/gogui/specialmac/*.class
 "/>
 </jar>
 <copy file="external/jgoodies/${looks.dir}/${looks.jarfile}" todir="lib"/>
@@ -686,6 +742,13 @@ ${quaqua.nestedzipfile}
 <java jar="lib/gogui.jar" fork="true"/>
 </target>
 
+<target name="specialmac" depends="compile"
+ description="Compile special MAC classes depending on com.apple">
+<javac srcdir="mac/src" source="1.5" deprecation="true" classpath="build"
+ listfiles="yes"
+ includes="net/sf/gogui/specialmac/RegisterSpecialMacHandler.java"/>
+</target>
+
 <target name="tags"
  description="Build a TAGS file for Emacs" >
 <exec executable="sh">
@@ -709,6 +772,10 @@ tofile="src/net/sf/gogui/version/Version.java" overwrite="true"/>
  tofile="doc/manual/xml/version.xml" overwrite="true"/>
 <replace file="doc/manual/xml/version.xml" token="@VERSION@"
  value="${version}"/>
+<copy
+ file="mac/packaging/Info.plist.in"
+ tofile="mac/packaging/Info.plist" overwrite="true"/>
+<replace file="mac/packaging/Info.plist" token="@VERSION@" value="${version}"/>
 <copy
  file="config/gogui-C.omf.in" tofile="config/gogui-C.omf" overwrite="true"/>
 <replace file="config/gogui-C.omf" token="@DATE@" value="${DSTAMP}"/>

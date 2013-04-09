@@ -1,6 +1,6 @@
 #!/bin/sh
 
-JAVA_DEFAULT=java
+JAVA_DEFAULT=/usr/lib/jvm/java-6-openjdk-i386/bin/java
 GOGUI_LIB=`dirname "$0"`/../lib
 # Fix path if running Cygwin environment on Windows
 if [ -f /usr/bin/cygpath ]; then

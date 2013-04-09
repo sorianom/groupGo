@@ -14,7 +14,7 @@ import javax.swing.JComponent;
 
 public class GlobalStatistics extends JComponent {
 	
-	BufferedImage groupsImg[] = new BufferedImage[4];
+	BufferedImage groupsImg[] = new BufferedImage[6];
 	String groupsImgText[] = {"group1.png", "group2.png", "group3.png", "group4.png"};
 	
 	int baseX = 250;

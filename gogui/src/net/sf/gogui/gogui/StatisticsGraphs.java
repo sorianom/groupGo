@@ -3,11 +3,14 @@ package net.sf.gogui.gogui;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.Scanner;
+import java.util.StringTokenizer;
 
 import javax.imageio.ImageIO;
 import javax.swing.JComponent;
@@ -23,21 +26,38 @@ public class StatisticsGraphs extends JComponent {
     int sizeY;
     int dist = 40;
     
-    Integer [] agents = new Integer[4];
+    Integer [] agents;
+    BufferedImage agentsImg[];
+	String lines[];
+	
+	int NUM_AGENTS = 0;
 	
     Color [] color = {new Color(254, 221, 22), new Color(246, 172, 25), new Color(216, 223, 32), new Color(157, 129, 187), new Color(246, 179, 210), new Color(93, 191, 144)};
-    
-	BufferedImage agentsImg[] = new BufferedImage[4];
-	
-	String lines[] = new String[4];
 	
 	 public StatisticsGraphs()
      {
-        String expertsImg[] = new String[4];
+		StringTokenizer st;
+		try {
+			BufferedReader br = new BufferedReader(new FileReader("votes_text_file.txt"));
+			st = new StringTokenizer(br.readLine());
+			NUM_AGENTS = new Integer(st.nextToken());
+		} catch (FileNotFoundException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
+		agents = new Integer[NUM_AGENTS];
+		agentsImg = new BufferedImage[NUM_AGENTS];
+		lines = new String[NUM_AGENTS];
+				
+        String expertsImg[] = new String[NUM_AGENTS];
         try {
 			Scanner scanner = new Scanner(new FileInputStream("experts.txt"));
 			
-			for(int i = 0; i < 4; i++)
+			for(int i = 0; i < NUM_AGENTS; i++)
 			{
 				expertsImg[i] = scanner.nextLine();
 				
@@ -54,7 +74,6 @@ public class StatisticsGraphs extends JComponent {
 				if (expertsImg[i].equals("fuegoSquare.png"))
 					agents[i] = 5;				
 			}
-			
 			scanner.close();
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
@@ -63,10 +82,10 @@ public class StatisticsGraphs extends JComponent {
 
         try
         {
-            for(int i = 0; i < 4; i++)
+            for(int i = 0; i < NUM_AGENTS; i++)
             {
                 System.out.println(expertsImg[i]);
-               agentsImg[i] = ImageIO.read(new File("img/" + expertsImg[i]));
+                agentsImg[i] = ImageIO.read(new File("img/" + expertsImg[i]));
             }
         }
         catch(IOException ioe){ioe.printStackTrace();}
@@ -81,9 +100,11 @@ public class StatisticsGraphs extends JComponent {
      
      public void paint(Graphics g)
      {
-    	 Float p[] = new Float[4];
-    	 String numbers[] = {"1", "2", "3", "4"};
-    	 JLabel numbersLabel[] = new JLabel[4];
+    	 Float p[] = new Float[NUM_AGENTS];
+    	 String numbers[] = new String[NUM_AGENTS];
+    	 for(int i = 0; i < numbers.length; i++)
+    		 numbers[i] = "" + (i+1);
+    	 JLabel numbersLabel[] = new JLabel[NUM_AGENTS];
     	 
          // Texts
          g.setColor(new Color(0,0,0));
@@ -117,13 +138,9 @@ public class StatisticsGraphs extends JComponent {
  				numLines++;
  			}
  			
- 			if (numLines == 4)
- 			{
-	 			for(int i = 0; i < 4; i++)
-	 			{
+ 			if (numLines == NUM_AGENTS)
+	 			for(int i = 0; i < NUM_AGENTS; i++)
 	 				p[i] = Float.parseFloat(lines[i]);
-	 			}
- 			}
  			else
  				return;
          }
@@ -132,7 +149,7 @@ public class StatisticsGraphs extends JComponent {
  			e.printStackTrace();
  		}
          
-    	 for(int i = 0; i < 4; i++)
+    	 for(int i = 0; i < NUM_AGENTS; i++)
          {
     		 sizeY = (int) (200.0f * p[i]);
     		 baseY = 100 + 200 - sizeY; 
@@ -154,9 +171,9 @@ public class StatisticsGraphs extends JComponent {
  				numLines++;
  			}
  			
- 			if (numLines == 4)
+ 			if (numLines == NUM_AGENTS)
  			{
-	 			for(int i = 0; i < 4; i++)
+	 			for(int i = 0; i < NUM_AGENTS; i++)
 	 			{
 	 				p[i] = Float.parseFloat(lines[i]);
 	 			}
@@ -170,7 +187,7 @@ public class StatisticsGraphs extends JComponent {
  		}
     	 
     	 
-    	 for(int i = 0; i < 4; i++)
+    	 for(int i = 0; i < NUM_AGENTS; i++)
     	 {
     		 //numbersLabel[i] = new JLabel(numbers[i]);
     		 g.setFont(g.getFont().deriveFont(40.0f ));

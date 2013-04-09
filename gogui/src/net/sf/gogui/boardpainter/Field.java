@@ -20,11 +20,14 @@ import java.awt.Stroke;
 import java.awt.font.LineMetrics;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.Scanner;
+import java.util.StringTokenizer;
 
 import javax.imageio.ImageIO;
 
@@ -32,10 +35,20 @@ import net.sf.gogui.go.GoColor;
 
 /** State of a field on the board. */
 public class Field
-    implements ConstField
+    implements ConstField 
 {
     public Field()
     {
+    	// QUICK FIX:
+    	try {
+	    	BufferedReader br = new BufferedReader(new FileReader("votes_text_file.txt"));
+			StringTokenizer st = new StringTokenizer(br.readLine());
+			m_numAgents = new Integer(st.nextToken());
+			m_markExperts = new boolean[m_numAgents];
+    	} catch (Exception e) {
+    		m_numAgents = 0;
+    		e.printStackTrace();
+    	}
     }
 
     public void clearInfluence()
@@ -81,97 +94,38 @@ public class Field
         m_graphics = null;
     }
 
-    public GoColor getColor()
-    {
-        return m_color;
-    }
-
-    public boolean getCursor()
-    {
-        return m_cursor;
-    }
-
-    public boolean getCrossHair()
-    {
-        return m_crossHair;
-    }
-
-    public Color getFieldBackground()
-    {
-        return m_fieldColor;
-    }
-
-    public boolean getMark()
-    {
-        return m_mark;
-    }
-
-    public boolean getMarkCircle()
-    {
-        return m_markCircle;
-    }
-
-    public boolean getMarkSquare()
-    {
-        return m_markSquare;
-    }
-
-    public boolean getMarkTriangle()
-    {
-        return m_markTriangle;
-    }
-
-    public boolean getSelect()
-    {
-        return m_select;
-    }
-
-    /** @see #setGhostStone */
-    public GoColor getGhostStone()
-    {
-        return m_ghostStone;
-    }
-
-    public static int getStoneMargin(int size)
-    {
-        return size / 17;
-    }
-
-    public String getLabel()
-    {
-        return m_label;
-    }
-
-    public GoColor getTerritory()
-    {
-        return m_territory;
-    }
-
-    public boolean isInfluenceSet()
-    {
-        return m_influenceSet;
-    }
-
+    public GoColor getColor()		{ return m_color; }
+    public boolean getCursor()		{ return m_cursor; }
+    public boolean getCrossHair()	{ return m_crossHair; }
+    public Color getFieldBackground() { return m_fieldColor; }
+    public boolean getMark()		{ return m_mark; }
+    public boolean getMarkCircle()	{ return m_markCircle; }
+    public boolean getMarkSquare()	{ return m_markSquare; }
+    public boolean getMarkTriangle() { return m_markTriangle; }
+    public boolean getSelect()		{ return m_select; }
+    public GoColor getGhostStone()	{ return m_ghostStone; } /** @see #setGhostStone */
+    public static int getStoneMargin(int size) { return size / 17; }
+    public String getLabel()		{ return m_label; }
+    public GoColor getTerritory()	{ return m_territory; }
+    public boolean isInfluenceSet() { return m_influenceSet; }
+    
     public void setFieldBackground(Color color)
     {
         m_fieldColor = color;
     }
-
     public void setColor(GoColor color)
     {
         m_color = color;
     }
-
     public void setCrossHair(boolean crossHair)
     {
         m_crossHair = crossHair;
     }
-
     public void setCursor(boolean cursor)
     {
         m_cursor = cursor;
     }
-
+    
     public void setInfluence(double value)
     {
         if (value > 1.)
@@ -246,18 +200,14 @@ public class Field
     private boolean m_select;
     
     // Doug Chen - ADDED:
-    private boolean m_markExpert1;
-    private boolean m_markExpert2;
-    private boolean m_markExpert3;
-    private boolean m_markExpert4;
-    
-    private boolean[] m_markExpert;
+    private boolean[] m_markExperts;
 
     private static int s_cachedFontFieldSize;
 
     private int m_paintSizeBlack;
     private int m_paintSizeWhite;
     private int m_size;
+    private int m_numAgents;
 
     private double m_influence;
 
@@ -422,7 +372,7 @@ public class Field
         Rectangle clip = m_graphics.getClipBounds();
         width = Math.min(width, (int)(0.95 * m_size));
         m_graphics.setClip(x, y - ascent, width, height);
-        if (m_color == EMPTY && m_ghostStone == null)
+        if (m_color == EMPTY && m_ghostStone == null) 
         {
             Rectangle boardClip = boardGraphics.getClipBounds();
             boardGraphics.setClip(fieldX + x, fieldY + y - ascent,
@@ -476,69 +426,67 @@ public class Field
                                 d + width, d + bottom);
             m_graphics.drawLine(d + width, d + bottom, d, d + bottom);
         }
+        
         // Doug Chen - ADDED
         int BI_WIDTH = 80;
         int BI_HEIGHT = 80;
         
-        String expertsImg[] = new String[4];
+        String expertsImg[] = new String[0];
+        expertsImg = new String[m_numAgents];
         try {
-			Scanner scanner = new Scanner(new FileInputStream("experts.txt"));
-			for(int i = 0; i < 4; i++)
+        	Scanner scanner = new Scanner(new FileInputStream("experts.txt"));
+			for(int i = 0; i < m_numAgents; i++)
 				expertsImg[i] = scanner.nextLine();
 			scanner.close();
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		}
-        
-        
+        } catch (Exception e) {
+        	e.printStackTrace();
+        }
         BufferedImage img = new BufferedImage(BI_WIDTH, BI_HEIGHT, BufferedImage.TYPE_INT_ARGB);
         
-        // Quick dirty fix
-        if (expertsImg[0].equals("fuego.png") && expertsImg[1].equals("fuego.png") && expertsImg[2].equals("fuego.png") && expertsImg[3].equals("fuego.png"))
-        {
-        	expertsImg[1] = "fuego2.png";
-        	expertsImg[2] = "fuego3.png";
-        	expertsImg[3] = "fuego4.png";
-        }
-        BufferedImage image_gnugo = readImage(expertsImg[0]);
-        BufferedImage image_fuego = readImage(expertsImg[1]);
-        BufferedImage image_mogo  = readImage(expertsImg[2]);
-        BufferedImage image_pachi = readImage(expertsImg[3]);
-        if(m_markExpert1 || m_markExpert2 || m_markExpert3 || m_markExpert4)
-        {
-	        if (m_markExpert1)
-	        	overlayImages(img, image_gnugo);
-	        if (m_markExpert2)
-	        	overlayImages(img, image_fuego);
-	        if (m_markExpert3)
-	        	overlayImages(img, image_mogo);
-	        if (m_markExpert4)
-	        	overlayImages(img, image_pachi);
-	        m_graphics.drawImage(img, m_graphics.getClipBounds().x,
-	        		m_graphics.getClipBounds().y, BI_WIDTH, BI_HEIGHT, null);
-        }
+        BufferedImage[] image_agents = new BufferedImage[m_numAgents];
+        for(int i = 0; i < image_agents.length; i++)
+        	image_agents[i] = readImage(expertsImg[i]);
         
+        boolean hasTrueExpert = false;
+    	for(int i = 0; i < m_numAgents; i++)
+    	{
+			if(m_markExperts[i])
+			{
+				hasTrueExpert = true;
+				break;
+			}
+    	}
+        if(hasTrueExpert) // DOUG CHEN - Added:
+        {
+        	/*for(int i = 0; i < m_markExperts.length; i++)
+        		if (m_markExperts[i])
+    	        	overlayImages(img, image_agents[i]);
+	        m_graphics.drawImage(img, m_graphics.getClipBounds().x,
+	        		m_graphics.getClipBounds().y, BI_WIDTH, BI_HEIGHT, null);*/
+        	
+        	int p = 0;
+        	final int OFFSET = 14;
+        	int [] posX = {OFFSET, -1*OFFSET, OFFSET, -1*OFFSET, OFFSET+3, -1*OFFSET - 3};
+        	int [] posY = {OFFSET, OFFSET, -1*OFFSET, -1*OFFSET, 0, 0};
+        	final int TRANSLATE = 12;
+        	
+        	for(int i = 0; i < m_markExperts.length; i++)
+        		if (m_markExperts[i])
+        		{
+        			m_graphics.drawImage(image_agents[i], m_graphics.getClipBounds().x - posX[p] + TRANSLATE,
+        	        		m_graphics.getClipBounds().y - posY[p] + TRANSLATE, BI_WIDTH/3, BI_HEIGHT/3, null);
+        			p++;
+        		}
+        }
         if (oldStroke != null)
             m_graphics2D.setStroke(oldStroke);
         m_graphics.setPaintMode();
     }
     
     // ADDED
-    public void setExpert1(boolean b)
+    public void setExpert(int i, boolean b)
     {
-    	m_markExpert1 = b;
-    }
-    public void setExpert2(boolean b)
-    {
-    	m_markExpert2 = b;
-    }
-    public void setExpert3(boolean b)
-    {
-    	m_markExpert3 = b;
-    }
-    public void setExpert4(boolean b)
-    {
-    	m_markExpert4 = b;
+    	m_markExperts[i] = b;
     }
 
     private void drawSelect()
@@ -574,8 +522,7 @@ public class Field
         }
         if (isGhostStone)
             setComposite(COMPOSITE_8);
-        m_graphics.fillOval(margin, margin,
-                            m_size - 2 * margin, m_size - 2 * margin);
+        m_graphics.fillOval(margin, margin, m_size - 2*margin, m_size - 2*margin);
     }
 
     private void drawTerritoryGraphics()

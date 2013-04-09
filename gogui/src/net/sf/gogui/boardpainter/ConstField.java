@@ -41,11 +41,5 @@ public interface ConstField
 
     boolean isInfluenceSet();
 
-	void setExpert1(boolean b);
-
-	void setExpert2(boolean b);
-
-	void setExpert3(boolean b);
-
-	void setExpert4(boolean b);
+	void setExpert(int i, boolean b);
 }

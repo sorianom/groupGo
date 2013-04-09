@@ -184,7 +184,7 @@ public class BoardPainter
 			BufferedReader br = new BufferedReader(new FileReader("votes_text_file.txt"));
 			StringTokenizer st = new StringTokenizer(br.readLine());
 			int numAgents = new Integer(st.nextToken());
-			Point[] votePoints = new Point[numAgents]; // magic #!
+			Point[] votePoints = new Point[numAgents];
             for(int i = 0; i < votePoints.length; i++)
             	votePoints[i] = new Point(-2, -2);
 			for(int i = 0; i < votePoints.length; i++)
@@ -210,19 +210,12 @@ public class BoardPainter
 	                Point location = getLocation(x, y);
 	                
 	            	// current point = one of the expert points
-	                if(votePoints[0].x == x && votePoints[0].y == y)
-	                	currField.setExpert1(true);
-	                if(votePoints[1].x == x && votePoints[1].y == y)
-	                	currField.setExpert2(true);
-	                if(votePoints[2].x == x && votePoints[2].y == y)
-	                	currField.setExpert3(true);
-	                if(votePoints[3].x == x && votePoints[3].y == y)
-	                	currField.setExpert4(true);
+	                for(int i = 0; i < votePoints.length; i++)
+		                if(votePoints[i].x == x && votePoints[i].y == y)
+		                	currField.setExpert(i, true);
 	                currField.draw(graphics, m_fieldSize, location.x, location.y, m_image, m_width);
-	                currField.setExpert1(false);
-	                currField.setExpert2(false);
-	                currField.setExpert3(false);
-	                currField.setExpert4(false);
+	                for(int i = 0; i < votePoints.length; i++)
+	                	currField.setExpert(i, false);
 	            }
 	        }
 		} catch (Exception e) {

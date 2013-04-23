@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package testimagedrag;
+package initialScreen;
 
 import java.awt.Color;
 import java.awt.Graphics;
@@ -28,10 +28,10 @@ public class DragBars extends JComponent implements MouseInputListener {
     
     Integer [] agents;
     
-    BufferedImage img[] = new BufferedImage[4];
-    String file[] = {"../demo/img/fuego.png", "../demo/img/gnugo.png",
-        "../demo/img/pachi.png", "../demo/img/mogo.png", "../demo/img/fuegoStar.png",
-        "../demo/img/fuegoSquare.png"};
+    BufferedImage img[] = new BufferedImage[6];
+    String file[] = {"../data/img/fuego.png", "../data/img/gnugo.png",
+        "../data/img/pachi.png", "../data/img/mogo.png", "../data/img/fuegoStar.png",
+        "../data/img/fuegoSquare.png"};
     
     Color [] color = {new Color(254, 221, 22), new Color(246, 172, 25), new Color(216, 223, 32), new Color(157, 129, 187), new Color(246, 179, 210), new Color(93, 191, 144)};
     
@@ -42,15 +42,18 @@ public class DragBars extends JComponent implements MouseInputListener {
         addMouseMotionListener(this);
         this.agents = agents;
         
-        try
-        {
-            for(int i = 0; i < 4; i++)
+        try {
+            for(int i = 0; i < agents.length; i++)
             {
-                System.out.println(file[agents[i]]);
-               img[i] = ImageIO.read(new File(file[agents[i]]));
+            	if(agents[i] != -1)
+            	{
+	                System.out.println(file[agents[i]]);
+	                img[i] = ImageIO.read(new File(file[agents[i]]));
+            	}
             }
+        } catch(IOException ioe) {
+        	ioe.printStackTrace(); 
         }
-        catch(IOException ioe){ioe.printStackTrace();}
     }
     
     public void initComponents()
@@ -73,24 +76,22 @@ public class DragBars extends JComponent implements MouseInputListener {
         g.drawString("0.5-", baseX - 50, 350 + 5);
         g.drawString("0.0-", baseX - 50, 450 + 5);
         
-        for(int i = 0; i < 4; i++)
+        for(int i = 0; i < agents.length; i++)
         {
-            g.setColor(color[agents[i]]);
-            g.fillRect(baseX + i*(sizeX + dist), baseY[i], sizeX, sizeY[i]);
-            
-            g.drawImage(img[i], baseX + i*(sizeX + dist) - 25, baseY[i] + sizeY[i], this);
+        	if(agents[i] != -1)
+        	{
+	            g.setColor(color[agents[i]]);
+	            g.fillRect(baseX + i*(sizeX + dist), baseY[i], sizeX, sizeY[i]);
+	            g.drawImage(img[i], baseX + i*(sizeX + dist) - 25, baseY[i] + sizeY[i], this);
+        	}
         }
     }
     
-    public Float [] getWeights()
+    public Float[] getWeights()
     {
-        Float [] weights = new Float[4];
-        
-        for(int i = 0; i < 4; i++)
-        {
+        Float [] weights = new Float[agents.length];
+        for(int i = 0; i < weights.length; i++)
             weights[i] = (float)(sizeY[i])/200.0f;
-        }
-        
         return weights;
     }
     
@@ -100,24 +101,20 @@ public class DragBars extends JComponent implements MouseInputListener {
     }
 
     @Override
-    public void mousePressed(MouseEvent me) {
-    }
+    public void mousePressed(MouseEvent me) { }
 
     @Override
-    public void mouseReleased(MouseEvent me) {
-    }
+    public void mouseReleased(MouseEvent me) { }
 
     @Override
-    public void mouseEntered(MouseEvent me) {
-    }
+    public void mouseEntered(MouseEvent me) { }
 
     @Override
-    public void mouseExited(MouseEvent me) {
-    }
+    public void mouseExited(MouseEvent me) { }
 
     @Override
     public void mouseDragged(MouseEvent me) {
-        for(int i = 0; i < 4; i++)
+        for(int i = 0; i < agents.length; i++)
         {
             if (me.getX() >= baseX + i*(sizeX + dist) && me.getX() <= baseX + (i+1)*(sizeX + dist))
             {
@@ -129,7 +126,6 @@ public class DragBars extends JComponent implements MouseInputListener {
     }
 
     @Override
-    public void mouseMoved(MouseEvent me) {
-    }
+    public void mouseMoved(MouseEvent me) { }
     
 }

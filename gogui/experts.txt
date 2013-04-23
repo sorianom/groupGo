@@ -1,6 +1,4 @@
-fuego.png
-fuego.png
-mogo.png
 gnugo.png
-fuegoStar.png
-pachi.png
+gnugo.png
+gnugo.png
+gnugo.png

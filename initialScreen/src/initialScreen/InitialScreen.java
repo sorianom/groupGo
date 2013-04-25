@@ -110,12 +110,10 @@ public class InitialScreen {
 
 				// ... called when button clicked
 				Float [] weights = dragBars.getWeights();                                
-
+				int validAgents = 0;
 				try {
 					FileWriter fstreamExperts = new FileWriter("../gogui/experts.txt");
 					BufferedWriter outExperts = new BufferedWriter(fstreamExperts);
-
-					int validAgents = 0;
 					for(int i = 0; i < agents.length; i++)
 					{
 						if(agents[i] != -1)
@@ -132,14 +130,10 @@ public class InitialScreen {
 					out.write("#!/bin/sh\n");
 					out.write("BLACK=\"" + softwares[agents[0]] + "\"\n");
 					out.write("WHITE=\"" + softwares[agents[0]] + "\"\n");
-					//out.write("ALICE=\"" + softwares[agents[0]] + "\"\n");
-					//out.write("ALBERT=\"" + softwares[agents[1]] + "\"\n");
-					//out.write("JOHN=\"" + softwares[agents[2]] + "\"\n");
 					//out.write("TWOGTP=\""+ twogtp + " -black \\\"$BLACK\\\" -white \\\"$WHITE\\\" -alice \\\"$ALICE\\\" -aliceWeight " + Float.toString(weights[0]) + " -albert \\\"$ALBERT\\\" -albertWeight " + Float.toString(weights[1]) + " -john \\\"$JOHN\\\" -johnWeight " + Float.toString(weights[2]) + " -francesco \\\"$FRANCESCO\\\" -francescoWeight " + Float.toString(weights[3]) + " -size 9 -iteration 0 -path /home/soriano/tmp/0/ -initial 0 -games 10 -groupColor white -sgffile /home/soriano/tmp/result\"\n");
 					out.write("TWOGTP=\""+ twogtp + " -black \\\"$BLACK\\\" -white \\\"$WHITE\\\" "
-							+ "-numAgents " + (weights.length) + " "
-							+ "-agentsList "
-							+ "-size 9 -iteration 0 -path ../gogui/output/tmp/0/ -initial 0 -games 3 -groupColor white -sgffile ../gogui/output/tmp/result ");
+							+ "-numAgents " + validAgents + " "
+							+ "-size 9 -iteration 0 -path /home/cs102/test_gogui -initial 0 -games 3 -groupColor white -sgffile /home/cs102/test_gogui/0/result ");
 					
 					// -path /home/cs102/test_gogui/ -initial 0 -games 5  -groupColor white -sgffile /home/cs102/test_gogui/0/result -size 9" -computer-both
 					
@@ -158,20 +152,19 @@ public class InitialScreen {
 					
 					// TODO: add weightsList option
 					out.write("-weightsList \\\"");
-					for(int i = 0; i < weights.length; i++)
+					for(int i = 0; i < validAgents; i++)
 					{
 						if(i != 0)
 							out.write('|');
 						out.write(new Float(weights[i]).toString());
 					}
 					out.write("\\\" ");
-					out.write("\"\n");
-					out.write(gogui + " -size 9 -program \"$TWOGTP\"");
+					out.write("\"\n"); 
+					out.write(gogui + " -size 9 -program \"$TWOGTP\" -computer-both");
 					out.close();
 					
 					BufferedWriter outVotesTextFile = new BufferedWriter(new FileWriter("../gogui/votes_text_file.txt"));
 					outVotesTextFile.write("" + validAgents);
-					
 					outVotesTextFile.close();
 
 					FileWriter fstreamFreqAgreed = new FileWriter("../gogui/freqAgreed.txt");
